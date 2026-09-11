@@ -40,7 +40,16 @@ const stale = APPS.filter((app) => {
 if (stale.length) {
   console.log(`Rebuilding stale preloads: ${stale.join(', ')}`)
   for (const app of stale) {
-    const r = spawnSync('npm', ['run', 'build', '-w', `@genoffice/${app}`], { stdio: 'inherit' })
+    // shell:true is required on Windows — bare `npm` is npm.cmd and spawnSync
+    // without a shell fails with ENOENT, aborting predev before `npm run dev`.
+    const r = spawnSync('npm', ['run', 'build', '-w', `@genoffice/${app}`], {
+      stdio: 'inherit',
+      shell: true,
+    })
+    if (r.error) {
+      console.error(`Failed to rebuild preload for ${app}: ${r.error.message}`)
+      process.exit(1)
+    }
     if (r.status !== 0) process.exit(r.status ?? 1)
   }
 }
