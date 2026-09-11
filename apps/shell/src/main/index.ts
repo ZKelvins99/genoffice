@@ -128,6 +128,7 @@ import {
   type McpSettings,
 } from './mcp/app-mcp'
 import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
+import { createDocsControl, installDocsBridge } from './mcp/docs-bridge'
 import {
   configureSheetsRuntime,
   hasActiveQueuedWorkbook,
@@ -2780,6 +2781,17 @@ function newDocTab(): void {
   }
 }
 
+/** MCP: open a blank docs tab and return its webContents id, for the visible-editor bridge */
+function openBlankDocsTabForMcp(): number {
+  if (!tabManager) throw new Error('GenOffice is not ready')
+  const tabId = tabManager.openDocsTab(undefined, { newBlank: true })
+  const view = tabManager.docsTabs().find((t) => t.id === tabId)
+  if (!view) throw new Error('the new document tab could not be opened')
+  recordStarPromptDocOpen()
+  analytics.track('file_new', { kind: 'docx' })
+  return view.webContents.id
+}
+
 function newSlideTab(): void {
   try {
     tabManager?.openSlidesTab()
@@ -3167,7 +3179,10 @@ function registerHomeIpc(): void {
     const current = currentMcpSettings()
     const enabled = typeof request.enabled === 'boolean' ? request.enabled : current.enabled
     const port =
-      typeof request.port === 'number' && Number.isInteger(request.port) && request.port > 0 && request.port < 65536
+      typeof request.port === 'number' &&
+      Number.isInteger(request.port) &&
+      request.port > 0 &&
+      request.port < 65536
         ? request.port
         : current.port
     writeAppSettings(APP_SETTINGS_PATH(), { mcpEnabled: enabled, mcpPort: port })
@@ -4349,12 +4364,16 @@ app.whenReady().then(async () => {
   initAnalytics()
   analytics.track('app_launch')
   startSheetsCaptureServer()
+  // Register the docs renderer bridge listeners before the MCP server can take
+  // a visible-editing request.
+  installDocsBridge()
   // MCP server: localhost-only, docx generation for external agents. Deps are
   // injected so the mcp module never imports this file back.
   configureMcpRuntime({
     version: app.getVersion(),
     defaultSaveDir: () => defaultSaveDir(),
     openPath: (filePath) => routeDocumentPath(filePath),
+    docsControl: createDocsControl({ openBlankTab: () => openBlankDocsTabForMcp() }),
   })
   void startMcpFromSettings(currentMcpSettings()).catch((error) => {
     console.error('[mcp] failed to start on boot:', error)

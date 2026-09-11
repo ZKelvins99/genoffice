@@ -23,9 +23,9 @@ tool surface.
 Enable the server in **Settings > General > Local MCP server**, then point a
 client at it. Both transports are served on loopback:
 
-- Streamable HTTP (recommended): `http://127.0.0.1:3001/mcp`
-- Legacy SSE: `http://127.0.0.1:3001/sse`
-- Health check: `http://127.0.0.1:3001/health`
+- Streamable HTTP (recommended): `http://127.0.0.1:3093/mcp`
+- Legacy SSE: `http://127.0.0.1:3093/sse`
+- Health check: `http://127.0.0.1:3093/health`
 
 For clients that only speak stdio (Claude Desktop, Cursor), bridge to the SSE
 transport with the bundled script:
@@ -35,7 +35,7 @@ transport with the bundled script:
   "mcpServers": {
     "genoffice": {
       "command": "node",
-      "args": ["/absolute/path/to/genoffice/scripts/mcp-stdio-bridge.js", "--port", "3001"]
+      "args": ["/absolute/path/to/genoffice/scripts/mcp-stdio-bridge.js", "--port", "3093"]
     }
   }
 }
@@ -44,6 +44,44 @@ transport with the bundled script:
 Tools exposed in phase 1: `create_docx` (markdown or `SaveBlock[]` → a file on
 disk), `read_docx` (visible text), `open_in_genoffice` (focus the file in a
 tab), `get_app_info`.
+
+## Phase 1.5: visible editing (external agent drives the UI)
+
+`create_docx` writes bytes behind the UI. To let an external agent build a
+document the user can _watch_ — the same way the built-in agent works — a
+visible session was added:
+
+| Tool              | Input                                      | Effect                                                         |
+| ----------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| `create_document` | `{}`                                       | opens a new blank docs tab; starts the session                 |
+| `insert_content`  | `{ html, afterBlockIndex? }`               | appends/inserts restricted HTML into that tab                  |
+| `replace_blocks`  | `{ startBlockIndex, endBlockIndex, html }` | replaces a block range                                         |
+| `apply_ops`       | `{ ops, dryRun? }`                         | applies a formatting batch (font, paragraph, heading, …)       |
+| `read_document`   | `{}`                                       | returns the live document's blocks/indexes/text                |
+| `save_document`   | `{ path, overwrite? }`                     | writes the live document to an absolute path, ends the session |
+
+Architecture (mirrors the built-in agent, per the analysis above):
+
+```
+MCP tool → DocsControl (apps/shell/src/main/mcp/docs-bridge.ts)
+         → webContents.send('docs:mcp-command', {requestId, command, payload})
+         → renderer apps/docs/src/renderer/mcp-bridge.ts
+              ├─ insert_content / replace_blocks / read_document → executeTool()   (agent tools.ts)
+              ├─ apply_ops                                      → executeOps()    (agent ops.ts)
+              └─ save_document                                  → save(ctx, …, {path, overwrite})
+         → webContents.send('docs:mcp-result', {requestId, ok, result})
+```
+
+The renderer reuses the agent's own executors, so external edits get the same
+HTML parser, atomic ops and formatting rules. `save_document` goes through a new
+`docs:save-to` main-process handler (explicit path, no dialog, refuses to
+clobber unless `overwrite:true`; same write allowlist / disk-state / recents
+bookkeeping as `docs:save-new`).
+
+These tools are only registered when the shell wired a `DocsControl`; headless
+and unit runs keep the file-only surface. Covered by
+`apps/shell/tests/mcp/document-tools.test.ts` (routing) and
+`e2e/mcp-visible-doc.spec.ts` (real app: visible tab → edits → saved docx).
 
 ## Goal
 
@@ -57,14 +95,14 @@ no port, no access. That is the intended semantics, not a limitation.
 Everything below the editor UI is plain TypeScript with **no DOM and no Electron
 dependency**, and returns bytes rather than writing files:
 
-| Capability | Entry | Node-safe |
-| --- | --- | --- |
-| Build a blank template | `buildBlankDocx()` — `packages/docx-engine/src/blank.ts:154` | yes |
-| Parse existing docx | `parseDocx(bytes)` — `packages/docx-engine/src/parse.ts:261` | yes |
-| **Serialize docx** | `saveDocx(parsed, blocks, options)` — `packages/docx-engine/src/patch.ts:380` | yes |
-| Blank pptx / open / save | `packages/pptx-engine/src/index.ts:615` / `:657`, `blank.ts:138` | yes |
-| PDF → docx / pptx / xlsx | `packages/pdf2docx/src/index.ts:43` | yes (caller inits pdfium wasm) |
-| HTML → docx | `packages/html2docx/src/convert.ts:41` | needs a browser driver; main already has `ElectronBrowserDriver` at `apps/html/src/main/html2docx-driver.ts:17` |
+| Capability               | Entry                                                                         | Node-safe                                                                                                       |
+| ------------------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Build a blank template   | `buildBlankDocx()` — `packages/docx-engine/src/blank.ts:154`                  | yes                                                                                                             |
+| Parse existing docx      | `parseDocx(bytes)` — `packages/docx-engine/src/parse.ts:261`                  | yes                                                                                                             |
+| **Serialize docx**       | `saveDocx(parsed, blocks, options)` — `packages/docx-engine/src/patch.ts:380` | yes                                                                                                             |
+| Blank pptx / open / save | `packages/pptx-engine/src/index.ts:615` / `:657`, `blank.ts:138`              | yes                                                                                                             |
+| PDF → docx / pptx / xlsx | `packages/pdf2docx/src/index.ts:43`                                           | yes (caller inits pdfium wasm)                                                                                  |
+| HTML → docx              | `packages/html2docx/src/convert.ts:41`                                        | needs a browser driver; main already has `ElectronBrowserDriver` at `apps/html/src/main/html2docx-driver.ts:17` |
 
 `saveDocx` is **the only thing in the codebase that writes OOXML bytes.** Both
 the manual save path and the built-in AI agent funnel through it. That makes it
@@ -115,11 +153,17 @@ the editor-doc → `SaveBlock[]` mapper is `pmDocToSavePlan`
 ### The reusable seam
 
 `pmDocToSavePlan` consumes **`PmNode`** — a plain JSON structure defined by this
-repo, *not* a ProseMirror library object:
+repo, _not_ a ProseMirror library object:
 
 ```ts
 // apps/docs/src/renderer/editor/convert.ts:63
-interface PmNode { type: string; attrs?: Record<string, unknown>; content?: PmNode[]; text?: string; marks?: PmMark[] }
+interface PmNode {
+  type: string
+  attrs?: Record<string, unknown>
+  content?: PmNode[]
+  text?: string
+  marks?: PmMark[]
+}
 ```
 
 Its only non-pure dependency is font metrics, injected as `FontMetricsProvider`
@@ -168,12 +212,12 @@ uses (`src/types/types.ts`), so the registration code transfers nearly verbatim.
 
 Tools exposed:
 
-| Tool | Input | Output |
-| --- | --- | --- |
-| `create_docx` | `{ title, content, format?: 'markdown' \| 'blocks' }`, `content` is markdown by default | `{ path }` |
-| `read_docx` | `{ path }` | extracted text / block structure (`parseDocx`) |
-| `open_in_genoffice` | `{ path }` | focuses the file in a GenOffice tab (via `TabManager`) |
-| `get_app_info` | `{}` | version, default save dir, supported formats |
+| Tool                | Input                                                                                   | Output                                                 |
+| ------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `create_docx`       | `{ title, content, format?: 'markdown' \| 'blocks' }`, `content` is markdown by default | `{ path }`                                             |
+| `read_docx`         | `{ path }`                                                                              | extracted text / block structure (`parseDocx`)         |
+| `open_in_genoffice` | `{ path }`                                                                              | focuses the file in a GenOffice tab (via `TabManager`) |
+| `get_app_info`      | `{}`                                                                                    | version, default save dir, supported formats           |
 
 Deliberately **out of phase 1**: editing an existing docx (`insert_content`-style
 patching needs `parsed.blocks` anchors, revisions, content controls), PDF/PPT
@@ -271,7 +315,9 @@ and exact parity with the app possible.
 
 1. `read_docx` fidelity: return plain text only, or structured blocks?
 2. Should `create_docx` open the result in a tab by default, or only on request?
-3. Port: fixed default (e.g. 3001, as Tabby-MCP) or ephemeral with discovery?
+3. Port: fixed default (e.g. 3093) or ephemeral with discovery? — **decided:
+   fixed default `3093`** (`DEFAULT_MCP_PORT`), user-overridable in Settings >
+   General.
 4. Does the stdio bridge ship for every platform, or is it a documented
    copy-paste for stdio-only clients?
 

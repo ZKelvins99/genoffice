@@ -202,7 +202,7 @@ const homeApi: HomeApi = {
     return {
       running: r?.running === true,
       enabled: r?.enabled === true,
-      port: typeof r?.port === 'number' ? r.port : 3001,
+      port: typeof r?.port === 'number' ? r.port : 3093,
       url: typeof r?.url === 'string' ? r.url : null,
       ...(typeof r?.error === 'string' ? { error: r.error } : {}),
     }
@@ -213,7 +213,7 @@ const homeApi: HomeApi = {
     return {
       running: r?.running === true,
       enabled: r?.enabled === true,
-      port: typeof r?.port === 'number' ? r.port : 3001,
+      port: typeof r?.port === 'number' ? r.port : 3093,
       url: typeof r?.url === 'string' ? r.url : null,
       ...(typeof r?.error === 'string' ? { error: r.error } : {}),
     }

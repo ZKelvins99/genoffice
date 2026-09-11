@@ -1,5 +1,5 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
-import { createDocumentTools } from './tools/document-tools'
+import { createDocumentTools, type DocsControl } from './tools/document-tools'
 
 /**
  * Main-process wiring for the MCP server.
@@ -17,6 +17,8 @@ export interface McpRuntimeDeps {
   defaultSaveDir: () => string
   /** open a file in the UI (routed to the matching tab) */
   openPath: (filePath: string) => boolean
+  /** drive a visible docs editor (live document session); absent in headless runs */
+  docsControl?: DocsControl
   logger?: (message: string) => void
 }
 
@@ -51,6 +53,7 @@ function buildTools(): McpToolDefinition[] {
       const opened = deps.openPath(filePath)
       if (!opened) throw new Error(`could not open ${filePath} in GenOffice`)
     },
+    docs: deps.docsControl,
   })
 }
 

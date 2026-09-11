@@ -220,3 +220,159 @@ describe('path policy helpers', () => {
     ).toThrow(/absolute/)
   })
 })
+
+/** a DocsControl that records what the tools asked it to do */
+function fakeDocsControl(wcId = 42) {
+  const calls: Array<{ wcId: number; command: string; payload: unknown }> = []
+  let opens = 0
+  const control = {
+    openBlankTab: async () => {
+      opens++
+      return wcId
+    },
+    runCommand: async (id: number, command: string, payload: unknown) => {
+      calls.push({ wcId: id, command, payload })
+      return { summary: `${command} ok` }
+    },
+  }
+  return { control, calls, opens: () => opens }
+}
+
+describe('M6 visible-editing tools (docs control wired)', () => {
+  let dir2: string
+  let service2: McpServerService | undefined
+  let client2: Client | undefined
+  let fake: ReturnType<typeof fakeDocsControl>
+
+  beforeEach(async () => {
+    dir2 = await mkdtemp(join(tmpdir(), 'genoffice-mcp-visible-'))
+    fake = fakeDocsControl()
+    const port = await (async () => {
+      const { createServer } = await import('node:http')
+      return new Promise<number>((resolve, reject) => {
+        const server = createServer()
+        server.on('error', reject)
+        server.listen(0, '127.0.0.1', () => {
+          const address = server.address()
+          const p = typeof address === 'object' && address ? address.port : 0
+          server.close(() => resolve(p))
+        })
+      })
+    })()
+    service2 = new McpServerService({
+      port,
+      tools: createDocumentTools({
+        version: '0.9.0-test',
+        defaultSaveDir: () => dir2,
+        docs: fake.control,
+      }),
+    })
+    await service2.start()
+    client2 = new Client({ name: 'm6-test', version: '0.0.0' })
+    await client2.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+    )
+  })
+
+  afterEach(async () => {
+    await client2?.close()
+    client2 = undefined
+    await service2?.stop()
+    service2 = undefined
+    await rm(dir2, { recursive: true, force: true })
+  })
+
+  function textOf(content: unknown): string {
+    const arr = content as Array<{ type: string; text?: string }>
+    return arr.map((c) => c.text ?? '').join('')
+  }
+
+  it('registers the visible session tools alongside the file tools', async () => {
+    const { tools } = await client2!.listTools()
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      'apply_ops',
+      'create_document',
+      'create_docx',
+      'get_app_info',
+      'insert_content',
+      'open_in_genoffice',
+      'read_document',
+      'read_docx',
+      'replace_blocks',
+      'save_document',
+    ])
+  })
+
+  it('create_document opens a blank tab and returns a document id', async () => {
+    const result = await client2!.callTool({ name: 'create_document', arguments: {} })
+    expect(result.isError).toBeFalsy()
+    const payload = JSON.parse(textOf(result.content)) as { documentId: number; ok: boolean }
+    expect(payload.ok).toBe(true)
+    expect(payload.documentId).toBe(42)
+    expect(fake.opens()).toBe(1)
+  })
+
+  it('routes insert_content into the created tab', async () => {
+    await client2!.callTool({ name: 'create_document', arguments: {} })
+    const result = await client2!.callTool({
+      name: 'insert_content',
+      arguments: { html: '<h1>Title</h1>', afterBlockIndex: 0 },
+    })
+    expect(result.isError).toBeFalsy()
+    expect(fake.calls.at(-1)).toEqual({
+      wcId: 42,
+      command: 'insert_content',
+      payload: { html: '<h1>Title</h1>', afterBlockIndex: 0 },
+    })
+  })
+
+  it('routes replace_blocks and apply_ops with their payloads', async () => {
+    await client2!.callTool({ name: 'create_document', arguments: {} })
+    await client2!.callTool({
+      name: 'replace_blocks',
+      arguments: { startBlockIndex: 0, endBlockIndex: 1, html: '<p>x</p>' },
+    })
+    expect(fake.calls.at(-1)?.command).toBe('replace_blocks')
+    await client2!.callTool({
+      name: 'apply_ops',
+      arguments: { ops: [{ op: 'setFont' }], dryRun: true },
+    })
+    expect(fake.calls.at(-1)).toEqual({
+      wcId: 42,
+      command: 'apply_ops',
+      payload: { ops: [{ op: 'setFont' }], dryRun: true },
+    })
+  })
+
+  it('save_document forwards path + overwrite and ends the session', async () => {
+    await client2!.callTool({ name: 'create_document', arguments: {} })
+    const target = join(dir2, 'out.docx')
+    const saved = await client2!.callTool({
+      name: 'save_document',
+      arguments: { path: target, overwrite: true },
+    })
+    expect(saved.isError).toBeFalsy()
+    expect(fake.calls.at(-1)).toEqual({
+      wcId: 42,
+      command: 'save_document',
+      payload: { path: target, overwrite: true },
+    })
+    // session ended: a follow-up edit reports an error instead of hitting a stale tab
+    const after = await client2!.callTool({
+      name: 'insert_content',
+      arguments: { html: '<p>late</p>' },
+    })
+    expect(after.isError).toBe(true)
+    expect(textOf(after.content)).toContain('create_document')
+  })
+
+  it('editing before create_document is refused', async () => {
+    const result = await client2!.callTool({
+      name: 'insert_content',
+      arguments: { html: '<p>nope</p>' },
+    })
+    expect(result.isError).toBe(true)
+    expect(textOf(result.content)).toContain('create_document')
+    expect(fake.calls).toEqual([])
+  })
+})

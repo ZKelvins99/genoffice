@@ -21,6 +21,25 @@ export interface DocToolDeps {
   defaultSaveDir: () => string
   /** open a file in the GenOffice UI; wired in M4 (optional in tests) */
   openInTab?: (filePath: string) => Promise<void> | void
+  /** visible-editor control for the MCP-driven document session (optional in tests) */
+  docs?: DocsControl
+}
+
+/** editor commands the docs renderer bridge understands (see docs shared/ipc.ts) */
+export type McpEditorCommandName =
+  'insert_content' | 'replace_blocks' | 'apply_ops' | 'read_document' | 'save_document'
+
+/**
+ * Visible-editor control: opens a docs tab and pushes editor commands into it,
+ * so an external agent builds/edits a document the user can watch instead of
+ * writing bytes behind the UI. Implemented in the shell main process
+ * (`apps/shell/src/main/mcp/docs-bridge.ts`).
+ */
+export interface DocsControl {
+  /** open a fresh blank docs tab; resolves to its webContents id */
+  openBlankTab: () => Promise<number>
+  /** run one editor command in that tab and resolve its result */
+  runCommand: (wcId: number, command: McpEditorCommandName, payload: unknown) => Promise<unknown>
 }
 
 const DOCX_EXT = '.docx'
@@ -173,6 +192,136 @@ export function createDocumentTools(deps: DocToolDeps): McpToolDefinition[] {
         defaultSaveDir: deps.defaultSaveDir(),
         formats: ['docx'],
       }),
+    },
+    ...createVisibleTools(deps),
+  ]
+}
+
+/**
+ * Visible-editing tools: build a document inside a real GenOffice tab so the
+ * user watches it take shape, then write it to a chosen path. These reuse the
+ * built-in agent's editor pipeline (the same restricted-HTML parser, ops
+ * executor and save path), so the result matches what the in-app AI produces.
+ *
+ * Only registered when the shell wired a DocsControl — headless/unit runs keep
+ * the phase-1 file-only surface.
+ */
+function createVisibleTools(deps: DocToolDeps): McpToolDefinition[] {
+  const docs = deps.docs
+  if (!docs) return []
+
+  /** the tab the current visible session edits; one session at a time */
+  let activeDocWc: number | null = null
+
+  const requireActive = (): number => {
+    if (activeDocWc === null) {
+      throw new Error('no document is open — call create_document first')
+    }
+    return activeDocWc
+  }
+
+  return [
+    {
+      name: 'create_document',
+      description:
+        'Open a new empty Word document in a visible GenOffice tab and start an editing session. ' +
+        'Follow it with insert_content / replace_blocks / apply_ops to write and format the document, ' +
+        'then save_document to write it to a path. The user sees each step happen in the app.',
+      inputSchema: {},
+      handler: async () => {
+        activeDocWc = await docs.openBlankTab()
+        return {
+          ok: true,
+          documentId: activeDocWc,
+          message:
+            'A new empty document is open in GenOffice. Add content, then call save_document.',
+        }
+      },
+    },
+    {
+      name: 'insert_content',
+      description:
+        'Insert content into the visible document as HTML (headings, paragraphs, bold/italic, lists, ' +
+        'tables, links). Appends at the end unless afterBlockIndex is given.',
+      inputSchema: {
+        html: z.string().describe('restricted HTML fragment to insert'),
+        afterBlockIndex: z
+          .number()
+          .int()
+          .optional()
+          .describe('insert after this block index; default appends at the end'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        return docs.runCommand(wc, 'insert_content', args)
+      },
+    },
+    {
+      name: 'replace_blocks',
+      description:
+        'Replace a range of blocks in the visible document with new HTML content. ' +
+        'Use read_document to learn block indexes.',
+      inputSchema: {
+        startBlockIndex: z.number().int().describe('first block index to replace (inclusive)'),
+        endBlockIndex: z.number().int().describe('last block index to replace (inclusive)'),
+        html: z.string().describe('restricted HTML fragment the range is replaced with'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        return docs.runCommand(wc, 'replace_blocks', args)
+      },
+    },
+    {
+      name: 'apply_ops',
+      description:
+        'Apply formatting commands to the visible document (font, paragraph format, heading level, ' +
+        'find/replace, list/indent, etc.). `ops` is the same batch format the built-in AI editor accepts; ' +
+        'the whole batch is atomic. Use read_document for block indexes.',
+      inputSchema: {
+        ops: z.array(z.any()).describe('array of op objects'),
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe('validate and plan the batch without changing the document'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        return docs.runCommand(wc, 'apply_ops', {
+          ops: args.ops,
+          dryRun: args.dryRun === true,
+        })
+      },
+    },
+    {
+      name: 'read_document',
+      description:
+        'Read the visible document: its blocks with indexes, text and current formatting, so you can ' +
+        'target follow-up edits.',
+      inputSchema: {},
+      handler: async () => {
+        const wc = requireActive()
+        return docs.runCommand(wc, 'read_document', {})
+      },
+    },
+    {
+      name: 'save_document',
+      description:
+        'Save the visible document to an absolute path and stop the editing session. ' +
+        'Refuses to replace an existing file unless overwrite is true. This is the output step.',
+      inputSchema: {
+        path: z.string().describe('absolute output path for the .docx file'),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe('allow replacing an existing file at `path`; default false'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        const payload = { path: String(args.path ?? ''), overwrite: args.overwrite === true }
+        const result = await docs.runCommand(wc, 'save_document', payload)
+        activeDocWc = null
+        return result
+      },
     },
   ]
 }

@@ -137,13 +137,14 @@ function CustomFontSizeInput({
   )
 }
 
-type SectionId = 'account' | 'aiModel' | 'aiMedia' | 'general' | 'about'
+type SectionId = 'account' | 'aiModel' | 'aiMedia' | 'general' | 'mcp' | 'about'
 
 const SECTIONS: readonly { id: SectionId; labelKey: StringKey }[] = [
   { id: 'account', labelKey: 'setSecAccount' },
   { id: 'aiModel', labelKey: 'setSecAiModel' },
   { id: 'aiMedia', labelKey: 'setSecAiMedia' },
   { id: 'general', labelKey: 'setSecGeneral' },
+  { id: 'mcp', labelKey: 'setSecMcp' },
   { id: 'about', labelKey: 'setSecAbout' },
 ]
 
@@ -205,6 +206,25 @@ function SectionIcon({ id }: { id: SectionId }) {
         />
         <circle cx="11.5" cy="5" r="1.7" stroke="currentColor" strokeWidth="1.3" />
         <circle cx="4.5" cy="11" r="1.7" stroke="currentColor" strokeWidth="1.3" />
+      </svg>
+    )
+  }
+  if (id === 'mcp') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path
+          d="M5.5 1.8v3M10.5 1.8v3"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
+        <path
+          d="M3.6 4.8h8.8v2.4a4.4 4.4 0 0 1-8.8 0V4.8Z"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+        <path d="M8 11.6v2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
     )
   }
@@ -997,7 +1017,7 @@ export function SettingsModal({
   const [autoSaveOn, setAutoSaveOn] = useState(false)
   const [mcpRunning, setMcpRunning] = useState(false)
   const [mcpEnabled, setMcpEnabled] = useState(false)
-  const [mcpPort, setMcpPort] = useState('3001')
+  const [mcpPort, setMcpPort] = useState('3093')
   const [mcpError, setMcpError] = useState('')
   const [mcpSaving, setMcpSaving] = useState(false)
   const [aiPrefs, setAiPrefs] = useState<AiPanelPrefs>(DEFAULT_AI_PANEL_PREFS)
@@ -1288,6 +1308,11 @@ export function SettingsModal({
                     }}
                   />
                 </div>
+              </>
+            )}
+            {section === 'mcp' && (
+              <>
+                <h3 className="set-pane-title">{t('setSecMcp')}</h3>
                 <div className="set-field">
                   <div className="set-field-text">
                     <div className="set-field-stack">
@@ -1309,7 +1334,7 @@ export function SettingsModal({
                       const next = !mcpEnabled
                       setMcpSaving(true)
                       void window.aiOffice
-                        .setMcpSettings({ enabled: next, port: Number(mcpPort) || 3001 })
+                        .setMcpSettings({ enabled: next, port: Number(mcpPort) || 3093 })
                         .then((s) => {
                           setMcpRunning(s.running)
                           setMcpEnabled(s.enabled)
@@ -1340,7 +1365,7 @@ export function SettingsModal({
                     onBlur={() => {
                       const port = Number(mcpPort)
                       if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-                        setMcpPort('3001')
+                        setMcpPort('3093')
                         return
                       }
                       if (!mcpEnabled) return
