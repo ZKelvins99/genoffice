@@ -120,6 +120,15 @@ import {
 import { blankXlsxBuffer } from '../../../sheets/src/gateway/csv-import'
 import { blankPdfBuffer } from '../../../pdf/src/main/blank-pdf'
 import {
+  applyMcpSettings,
+  configureMcpRuntime,
+  mcpStatus,
+  startMcpFromSettings,
+  stopMcpSync,
+  type McpSettings,
+} from './mcp/app-mcp'
+import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
+import {
   configureSheetsRuntime,
   hasActiveQueuedWorkbook,
   installSheetsMenu,
@@ -369,8 +378,20 @@ function currentAutoSaveDefault(): AutoSaveDefault {
   return cachedAutoSaveDefault
 }
 
-let cachedAiPanelPrefs: AiPanelPrefs | null = null
+/** MCP server settings (persisted in userData/app-settings.json; default off). */
+function currentMcpSettings(): McpSettings {
+  const saved = readAppSettings(APP_SETTINGS_PATH())
+  const port = saved.mcpPort
+  return {
+    enabled: saved.mcpEnabled === true,
+    port:
+      typeof port === 'number' && Number.isInteger(port) && port > 0 && port < 65536
+        ? port
+        : DEFAULT_MCP_PORT,
+  }
+}
 
+let cachedAiPanelPrefs: AiPanelPrefs | null = null
 function currentAiPanelPrefs(): AiPanelPrefs {
   if (cachedAiPanelPrefs) return cachedAiPanelPrefs
   const saved = readAppSettings(APP_SETTINGS_PATH())
@@ -3138,6 +3159,26 @@ function registerHomeIpc(): void {
     for (const wc of webContents.getAllWebContents()) wc.send('app:auto-save-default-changed', next)
   })
 
+  ipcMain.handle(HOME_CHANNELS.getMcpStatus, () => mcpStatus())
+
+  ipcMain.handle(HOME_CHANNELS.setMcpSettings, async (_event, patch: unknown) => {
+    if (!patch || typeof patch !== 'object') return mcpStatus()
+    const request = patch as { enabled?: unknown; port?: unknown }
+    const current = currentMcpSettings()
+    const enabled = typeof request.enabled === 'boolean' ? request.enabled : current.enabled
+    const port =
+      typeof request.port === 'number' && Number.isInteger(request.port) && request.port > 0 && request.port < 65536
+        ? request.port
+        : current.port
+    writeAppSettings(APP_SETTINGS_PATH(), { mcpEnabled: enabled, mcpPort: port })
+    try {
+      return await applyMcpSettings({ enabled, port })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ...mcpStatus(), error: message }
+    }
+  })
+
   ipcMain.handle(HOME_CHANNELS.getAnalyticsEnabled, (): boolean => analyticsEnabled())
 
   ipcMain.handle(HOME_CHANNELS.setAnalyticsEnabled, (_event, enabled: unknown): boolean => {
@@ -4308,6 +4349,16 @@ app.whenReady().then(async () => {
   initAnalytics()
   analytics.track('app_launch')
   startSheetsCaptureServer()
+  // MCP server: localhost-only, docx generation for external agents. Deps are
+  // injected so the mcp module never imports this file back.
+  configureMcpRuntime({
+    version: app.getVersion(),
+    defaultSaveDir: () => defaultSaveDir(),
+    openPath: (filePath) => routeDocumentPath(filePath),
+  })
+  void startMcpFromSettings(currentMcpSettings()).catch((error) => {
+    console.error('[mcp] failed to start on boot:', error)
+  })
   createShellWindow()
   // deferred to ready: labels need currentLang(), which reads app.getLocale()
   installBackToHomeItems()
@@ -4330,4 +4381,7 @@ app.on('before-quit', () => {
   // No close prompt may fall through to "Save" during shutdown
   markSheetsShuttingDown()
   stopSheetsSidecar()
+  // release the MCP port synchronously (macOS keeps the process alive after
+  // the last window closes, so window-all-closed is not enough)
+  stopMcpSync()
 })

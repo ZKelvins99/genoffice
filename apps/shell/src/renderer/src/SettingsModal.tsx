@@ -995,6 +995,11 @@ export function SettingsModal({
   const [analyticsOn, setAnalyticsOn] = useState(true)
   const [analyticsSaving, setAnalyticsSaving] = useState(false)
   const [autoSaveOn, setAutoSaveOn] = useState(false)
+  const [mcpRunning, setMcpRunning] = useState(false)
+  const [mcpEnabled, setMcpEnabled] = useState(false)
+  const [mcpPort, setMcpPort] = useState('3001')
+  const [mcpError, setMcpError] = useState('')
+  const [mcpSaving, setMcpSaving] = useState(false)
   const [aiPrefs, setAiPrefs] = useState<AiPanelPrefs>(DEFAULT_AI_PANEL_PREFS)
   const [channel, setChannel] = useState<'stable' | 'beta'>('stable')
   const [appVersion, setAppVersion] = useState('')
@@ -1013,6 +1018,13 @@ export function SettingsModal({
     })
     void window.aiOffice.getAutoSaveDefault?.().then((v) => {
       if (alive) setAutoSaveOn(v.on)
+    })
+    void window.aiOffice.getMcpStatus?.().then((s) => {
+      if (!alive) return
+      setMcpRunning(s.running)
+      setMcpEnabled(s.enabled)
+      setMcpPort(String(s.port))
+      setMcpError(s.error ?? '')
     })
     void window.aiOffice.getAiPanelPrefs?.().then((prefs) => {
       if (alive) setAiPrefs(prefs)
@@ -1273,6 +1285,76 @@ export function SettingsModal({
                         })
                         .catch(() => {})
                         .finally(() => setAnalyticsSaving(false))
+                    }}
+                  />
+                </div>
+                <div className="set-field">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
+                      <div className="set-field-label">{t('setMcp')}</div>
+                      <div className="set-field-desc">{t('setMcpDesc')}</div>
+                      {mcpError ? <div className="set-field-desc">{mcpError}</div> : null}
+                      {mcpRunning && !mcpError ? (
+                        <div className="set-field-desc">{`http://127.0.0.1:${mcpPort}/mcp`}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    className="set-switch"
+                    role="switch"
+                    aria-checked={mcpEnabled}
+                    aria-label={t('setMcp')}
+                    disabled={mcpSaving}
+                    onClick={() => {
+                      const next = !mcpEnabled
+                      setMcpSaving(true)
+                      void window.aiOffice
+                        .setMcpSettings({ enabled: next, port: Number(mcpPort) || 3001 })
+                        .then((s) => {
+                          setMcpRunning(s.running)
+                          setMcpEnabled(s.enabled)
+                          setMcpPort(String(s.port))
+                          setMcpError(s.error ?? '')
+                        })
+                        .catch(() => {})
+                        .finally(() => setMcpSaving(false))
+                    }}
+                  />
+                </div>
+                <div className="set-field">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
+                      <label className="set-field-label" htmlFor="set-mcp-port">
+                        {t('setMcpPort')}
+                      </label>
+                    </div>
+                  </div>
+                  <input
+                    id="set-mcp-port"
+                    className="set-input"
+                    type="number"
+                    min={1024}
+                    max={65535}
+                    value={mcpPort}
+                    onChange={(e) => setMcpPort(e.target.value)}
+                    onBlur={() => {
+                      const port = Number(mcpPort)
+                      if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+                        setMcpPort('3001')
+                        return
+                      }
+                      if (!mcpEnabled) return
+                      setMcpSaving(true)
+                      void window.aiOffice
+                        .setMcpSettings({ enabled: mcpEnabled, port })
+                        .then((s) => {
+                          setMcpRunning(s.running)
+                          setMcpEnabled(s.enabled)
+                          setMcpPort(String(s.port))
+                          setMcpError(s.error ?? '')
+                        })
+                        .catch(() => {})
+                        .finally(() => setMcpSaving(false))
                     }}
                   />
                 </div>

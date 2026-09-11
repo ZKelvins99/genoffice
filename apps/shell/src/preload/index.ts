@@ -196,6 +196,28 @@ const homeApi: HomeApi = {
     if (typeof on !== 'boolean') throw new Error('Invalid AutoSave default.')
     await ipcRenderer.invoke(HOME_CHANNELS.setAutoSaveDefault, on)
   },
+  async getMcpStatus() {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getMcpStatus)
+    const r = result as { running?: unknown; enabled?: unknown; port?: unknown; url?: unknown; error?: unknown } | null
+    return {
+      running: r?.running === true,
+      enabled: r?.enabled === true,
+      port: typeof r?.port === 'number' ? r.port : 3001,
+      url: typeof r?.url === 'string' ? r.url : null,
+      ...(typeof r?.error === 'string' ? { error: r.error } : {}),
+    }
+  },
+  async setMcpSettings(patch: { enabled?: boolean; port?: number }) {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.setMcpSettings, patch)
+    const r = result as { running?: unknown; enabled?: unknown; port?: unknown; url?: unknown; error?: unknown } | null
+    return {
+      running: r?.running === true,
+      enabled: r?.enabled === true,
+      port: typeof r?.port === 'number' ? r.port : 3001,
+      url: typeof r?.url === 'string' ? r.url : null,
+      ...(typeof r?.error === 'string' ? { error: r.error } : {}),
+    }
+  },
   async getAnalyticsEnabled() {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getAnalyticsEnabled)
     return result !== false

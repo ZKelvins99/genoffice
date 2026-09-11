@@ -44,6 +44,17 @@ export interface AutoSaveDefault {
   updatedAt: number
 }
 
+/** local MCP server state (persisted in userData/app-settings.json) */
+export interface McpStatus {
+  running: boolean
+  enabled: boolean
+  port: number
+  /** base URL when running, else null */
+  url: string | null
+  /** present when the last start attempt failed (e.g. port in use) */
+  error?: string
+}
+
 /** a recent file entry shown on the home screen; type derives from the extension */
 export interface RecentEntry {
   path: string
@@ -148,6 +159,10 @@ export interface HomeApi {
   getAutoSaveDefault(): Promise<AutoSaveDefault>
   /** persist the AutoSave default; broadcasts 'app:auto-save-default-changed' to all web contents */
   setAutoSaveDefault(on: boolean): Promise<void>
+  /** current local MCP server state (running/enabled/port/url) */
+  getMcpStatus(): Promise<McpStatus>
+  /** enable/disable the MCP server and/or change its port; applies and persists, returns the new state */
+  setMcpSettings(patch: { enabled?: boolean; port?: number }): Promise<McpStatus>
   /** whether anonymous usage statistics are enabled (default true in official builds) */
   getAnalyticsEnabled(): Promise<boolean>
   /** persist an explicit analytics opt-in or opt-out */
@@ -345,6 +360,8 @@ export const HOME_CHANNELS = {
   setTheme: 'home:set-theme',
   getAutoSaveDefault: 'home:get-auto-save-default',
   setAutoSaveDefault: 'home:set-auto-save-default',
+  getMcpStatus: 'home:get-mcp-status',
+  setMcpSettings: 'home:set-mcp-settings',
   getAnalyticsEnabled: 'home:get-analytics-enabled',
   setAnalyticsEnabled: 'home:set-analytics-enabled',
   getAiPanelPrefs: 'home:get-ai-panel-prefs',
