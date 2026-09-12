@@ -2,6 +2,7 @@ import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mc
 import { McpLogger } from './mcp-logger'
 import { createDocumentTools, type DocsControl } from './tools/document-tools'
 import { createSlidesTools, type SlidesControl } from './tools/slides-tools'
+import { createSheetsTools, type SheetsControl } from './tools/sheets-tools'
 
 /**
  * Main-process wiring for the MCP server.
@@ -23,6 +24,8 @@ export interface McpRuntimeDeps {
   docsControl?: DocsControl
   /** drive a visible slides deck (main-process session); absent in headless runs */
   slidesControl?: SlidesControl
+  /** drive a visible sheets grid (renderer workbook session); absent in headless runs */
+  sheetsControl?: SheetsControl
   /** where the MCP log file lives (userData); logging is unavailable without it */
   logFilePath?: string
 }
@@ -90,7 +93,10 @@ export function revealMcpLogFile(): void {
 function buildTools(): McpToolDefinition[] {
   if (!deps) throw new Error('MCP runtime not configured')
   // get_app_info advertises what the registered tool families can generate
-  const extraFormats = deps.slidesControl ? ['pptx'] : []
+  const extraFormats = [
+    ...(deps.slidesControl ? ['pptx'] : []),
+    ...(deps.sheetsControl ? ['xlsx'] : []),
+  ]
   return [
     ...createDocumentTools({
       version: deps.version,
@@ -111,6 +117,11 @@ function buildTools(): McpToolDefinition[] {
       defaultSaveDir: deps.defaultSaveDir,
       background: currentSettings.background,
       slides: deps.slidesControl,
+    }),
+    ...createSheetsTools({
+      defaultSaveDir: deps.defaultSaveDir,
+      background: currentSettings.background,
+      sheets: deps.sheetsControl,
     }),
   ]
 }
@@ -180,7 +191,11 @@ export function mcpStatus(): McpStatus {
     background: currentSettings.background,
     logging: currentSettings.logging,
     url: running ? service!.getUrl() : null,
-    capabilities: ['docs', ...(deps?.slidesControl ? ['slides'] : [])],
+    capabilities: [
+      'docs',
+      ...(deps?.slidesControl ? ['slides'] : []),
+      ...(deps?.sheetsControl ? ['sheets'] : []),
+    ],
   }
 }
 

@@ -1,0 +1,248 @@
+import { statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
+import { z } from 'zod'
+import { atomicWriteFile } from '../../../../../docs/src/main/atomic-write'
+import { rowsToXlsxBuffer } from '../../../../../sheets/src/gateway/csv-import'
+import { resolveOutputPath } from './document-tools'
+import type { McpToolDefinition } from '../mcp-server'
+
+/**
+ * Sheets (xlsx) tool surface for the MCP server.
+ *
+ * Two paths, mirroring the docx/slides tools:
+ * - headless `create_xlsx`: a values-only workbook written straight to disk,
+ *   gated behind the "background generation" setting. Values-only matches the
+ *   app's own AI create_document writer (`sheetCsvToXlsxBuffer`); formula
+ *   fidelity goes through the Rust sidecar and is deliberately not exposed
+ *   headlessly yet (tracked as M2.2 in planning/mcp-phase2-plan.md).
+ * - a visible grid session: the tools drive a real sheets tab the user
+ *   watches. The workbook lives in the renderer (Univer), so this needs a
+ *   request/response bridge into the renderer (`sheets-bridge.ts` here, the
+ *   renderer half at `apps/sheets/src/renderer/mcp-bridge.ts`) — the same
+ *   pattern as the docs session.
+ */
+
+export interface SheetsToolDeps {
+  /** directory generated files land in when the caller gives no path */
+  defaultSaveDir: () => string
+  /** expose the headless create_xlsx tool; default true — the shell passes the user's setting */
+  background?: boolean
+  /** visible-grid control; absent in headless/unit runs, which drops the session tools */
+  sheets?: SheetsControl
+}
+
+/**
+ * Visible-grid control implemented in the shell main process
+ * (`apps/shell/src/main/mcp/sheets-bridge.ts`): opens a blank sheets tab and
+ * forwards commands to the renderer that owns the Univer workbook.
+ */
+export interface SheetsControl {
+  /** open a fresh blank sheets tab; resolves to its webContents id once the renderer is ready */
+  openBlankTab: () => Promise<number>
+  /** run one command in that tab and resolve its result */
+  runCommand: (
+    wcId: number,
+    command: 'apply_ops' | 'read_sheet' | 'save_sheet',
+    payload: unknown,
+  ) => Promise<unknown>
+}
+
+const XLSX_EXT = '.xlsx'
+
+/** the headless tool: a row matrix -> values-only xlsx written straight to disk */
+function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
+  return {
+    name: 'create_xlsx',
+    description:
+      'Create an Excel .xlsx file (values only) and save it to disk without opening the app UI. ' +
+      '`data` is a 2D array of rows; cells given as numbers become numeric cells, everything else is text. ' +
+      'Formulas are not evaluated headlessly — pass computed values, or use the visible create_sheet ' +
+      'session with set_formula ops instead. Returns the absolute path of the written file.',
+    inputSchema: {
+      title: z.string().describe('workbook title, used as the file name'),
+      data: z
+        .array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])))
+        .describe('rows of cell values; row 0 becomes spreadsheet row 1'),
+      sheetName: z.string().optional().describe('name of the single sheet; default Sheet1'),
+      path: z
+        .string()
+        .optional()
+        .describe('absolute output path; default is a new file in the default save folder'),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe('allow replacing an existing file at `path`; default false'),
+    },
+    handler: async (args) => {
+      const title = String(args.title ?? '').trim()
+      if (!title) throw new Error('title must not be empty')
+      if (!Array.isArray(args.data)) throw new Error('data must be a 2D array of rows')
+      if (args.data.some((row) => !Array.isArray(row))) {
+        throw new Error('data must be a 2D array of rows')
+      }
+      const sheetName =
+        typeof args.sheetName === 'string' && args.sheetName.trim()
+          ? args.sheetName.trim()
+          : 'Sheet1'
+
+      const targetPath = resolveOutputPath({
+        defaultSaveDir: deps.defaultSaveDir,
+        ext: XLSX_EXT,
+        title,
+        requestedPath: typeof args.path === 'string' ? args.path : undefined,
+        overwrite: args.overwrite === true,
+      })
+
+      const rows = (args.data as unknown[][]).map((row) =>
+        row.map((cell) => {
+          if (cell === null || cell === undefined) return ''
+          if (typeof cell === 'number') {
+            return Number.isFinite(cell) ? String(cell) : ''
+          }
+          return String(cell)
+        }),
+      )
+      const buffer = await rowsToXlsxBuffer(rows, sheetName)
+      await atomicWriteFile(targetPath, buffer)
+      return {
+        path: targetPath,
+        cells: rows.reduce((n, row) => n + row.length, 0),
+        bytes: statSync(targetPath).size,
+      }
+    },
+  }
+}
+
+export function createSheetsTools(deps: SheetsToolDeps): McpToolDefinition[] {
+  return [
+    // headless generation is opt-in, same rule as create_docx/create_pptx
+    ...(deps.background === false ? [] : [createHeadlessXlsxTool(deps)]),
+    ...createGridSessionTools(deps),
+  ]
+}
+
+/**
+ * Visible-grid session: fill a spreadsheet inside a real GenOffice tab so the
+ * user watches the grid take shape, then write it to a chosen path. The ops are
+ * the same zod-validated workbook DSL the built-in AI uses (planFromOps +
+ * applyChangePlan), executed by the tab's renderer.
+ *
+ * Only registered when the shell wired a SheetsControl — headless/unit runs
+ * keep the file-only surface.
+ */
+function createGridSessionTools(deps: SheetsToolDeps): McpToolDefinition[] {
+  const sheets = deps.sheets
+  if (!sheets) return []
+
+  /** the tab the current visible session edits; one session at a time */
+  let activeSheetWc: number | null = null
+
+  const requireActive = (): number => {
+    if (activeSheetWc === null) {
+      throw new Error('no workbook is open — call create_sheet first')
+    }
+    return activeSheetWc
+  }
+
+  return [
+    {
+      name: 'create_sheet',
+      description:
+        'Open a new empty spreadsheet in a visible GenOffice tab and start an editing session. ' +
+        'Follow it with apply_sheet_ops to fill the grid, then save_sheet to write the file. ' +
+        'The user sees each step happen in the app.',
+      inputSchema: {},
+      handler: async () => {
+        activeSheetWc = await sheets.openBlankTab()
+        return {
+          ok: true,
+          workbookId: activeSheetWc,
+          message:
+            'A new empty spreadsheet is open in GenOffice. Fill the grid, then call save_sheet.',
+        }
+      },
+    },
+    {
+      name: 'read_sheet',
+      description:
+        'Read the visible workbook: sheet names/ids with data extents, and optionally the current ' +
+        'values/formulas of specific cells. Sheet ids and A1 addresses are what apply_sheet_ops targets.',
+      inputSchema: {
+        addresses: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'A1 addresses to read (values + formulas); omit to get the workbook overview only',
+          ),
+        sheetId: z
+          .string()
+          .optional()
+          .describe(
+            'sheet to read from (id from a previous overview); default is the active sheet',
+          ),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        const payload = {
+          ...(Array.isArray(args.addresses) ? { addresses: args.addresses.map(String) } : {}),
+          ...(typeof args.sheetId === 'string' ? { sheetId: args.sheetId } : {}),
+        }
+        return sheets.runCommand(wc, 'read_sheet', payload)
+      },
+    },
+    {
+      name: 'apply_sheet_ops',
+      description:
+        'Apply workbook DSL operations to the visible spreadsheet (the same vocabulary the built-in ' +
+        'AI uses). Common ops: set_cell, set_formula, clear_cell, set_range, clear_range, fill_range, ' +
+        'copy_range, convert_to_values, insert_rows, delete_rows, insert_cols, delete_cols, add_sheet, ' +
+        'delete_sheet, add_chart, add_table, set_filter, set_hyperlink, add_conditional_format, ' +
+        'set_data_validation, set_note. Addresses are A1 on the target sheet. One batch applies as one ' +
+        'undo step; a failed batch changes nothing. Use read_sheet for sheet ids and current values first.',
+      inputSchema: {
+        ops: z.array(z.any()).describe('array of workbook DSL op objects'),
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe('plan the batch and report what would change, without modifying the grid'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        if (!Array.isArray(args.ops)) throw new Error('ops must be an array')
+        const result = (await sheets.runCommand(wc, 'apply_ops', {
+          ops: args.ops,
+          dryRun: args.dryRun === true,
+        })) as { ok?: boolean; reason?: string }
+        // a rejected batch is a tool-level error so the caller reacts to it
+        if (result?.ok === false) {
+          throw new Error(result.reason ?? 'the batch could not be applied')
+        }
+        return result
+      },
+    },
+    {
+      name: 'save_sheet',
+      description:
+        'Save the visible spreadsheet to an absolute path and stop the editing session. ' +
+        'Refuses to replace an existing file unless overwrite is true. This is the output step.',
+      inputSchema: {
+        path: z.string().describe('absolute output path for the .xlsx file'),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe('allow replacing an existing file at `path`; default false'),
+      },
+      handler: async (args) => {
+        const wc = requireActive()
+        const filePath = String(args.path ?? '')
+        if (!isAbsolute(filePath)) throw new Error('path must be absolute')
+        const result = await sheets.runCommand(wc, 'save_sheet', {
+          path: filePath,
+          overwrite: args.overwrite === true,
+        })
+        activeSheetWc = null
+        return result
+      },
+    },
+  ]
+}

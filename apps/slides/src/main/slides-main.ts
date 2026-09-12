@@ -946,7 +946,8 @@ export function applySessionTxn(session: Session, req: ApplyTxnOp): ApplyTxnResu
   // Slides are re-found by the executor-stamped durable id: a numeric target.slide drifts
   // when a later structural op (deleteSlide/moveSlide/duplicateSlide) shifts pages.
   const slideIdxOf = (rec: OpRecord): number => {
-    if (rec.slideId) return session.opened.deck.slides.findIndex((s) => slideDurableId(s) === rec.slideId)
+    if (rec.slideId)
+      return session.opened.deck.slides.findIndex((s) => slideDurableId(s) === rec.slideId)
     return -1
   }
   const renderedByIdx = new Map<number, ReturnType<typeof rebuildSlide>>()
@@ -964,7 +965,10 @@ export function applySessionTxn(session: Session, req: ApplyTxnOp): ApplyTxnResu
     if (o.op !== 'setText' && o.op !== 'setFont' && o.op !== 'setParagraphFormat') continue
     if (o.op === 'setText' && (rec.after as { levelDirty?: boolean } | undefined)?.levelDirty)
       continue
-    if (o.op === 'setParagraphFormat' && (o.format as { indentDelta?: number } | undefined)?.indentDelta) {
+    if (
+      o.op === 'setParagraphFormat' &&
+      (o.format as { indentDelta?: number } | undefined)?.indentDelta
+    ) {
       materializeSlide(session.opened, idx)
       renderedByIdx.delete(idx)
       continue

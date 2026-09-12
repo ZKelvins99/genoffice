@@ -91,7 +91,10 @@ export function resolveOutputPath(opts: {
   if (!isAbsolute(opts.requestedPath)) {
     throw new Error('path must be absolute')
   }
-  const finalPath = extname(opts.requestedPath).toLowerCase() === ext ? opts.requestedPath : `${opts.requestedPath}${ext}`
+  const finalPath =
+    extname(opts.requestedPath).toLowerCase() === ext
+      ? opts.requestedPath
+      : `${opts.requestedPath}${ext}`
   if (existsSync(finalPath) && !opts.overwrite) {
     throw new Error(`file already exists: ${finalPath} (pass overwrite:true to replace it)`)
   }

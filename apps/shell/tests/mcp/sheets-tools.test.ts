@@ -1,0 +1,259 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import JSZip from 'jszip'
+import { McpServerService } from '../../src/main/mcp/mcp-server'
+import {
+  createSheetsTools,
+  type SheetsControl,
+} from '../../src/main/mcp/tools/sheets-tools'
+
+/**
+ * Sheets tool surface over a real MCP session: headless create_xlsx (row
+ * matrix, numeric typing, path policy, background gating) and the visible grid
+ * session tools driven through a fake SheetsControl.
+ */
+
+let service: McpServerService | undefined
+let dir: string
+let client: Client | undefined
+
+async function freePort(): Promise<number> {
+  const { createServer } = await import('node:http')
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : 0
+      server.close(() => resolve(port))
+    })
+  })
+}
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'genoffice-mcp-xlsx-'))
+})
+
+afterEach(async () => {
+  await client?.close()
+  client = undefined
+  await service?.stop()
+  service = undefined
+  await rm(dir, { recursive: true, force: true })
+})
+
+async function startService(tools: ReturnType<typeof createSheetsTools>): Promise<void> {
+  const port = await freePort()
+  service = new McpServerService({ port, tools })
+  await service.start()
+  client = new Client({ name: 'sheets-test', version: '0.0.0' })
+  await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)))
+}
+
+function baseDeps(background?: boolean): {
+  defaultSaveDir: () => string
+  background?: boolean
+} {
+  return { defaultSaveDir: () => dir, ...(background === undefined ? {} : { background }) }
+}
+
+function text(content: unknown): string {
+  const arr = content as Array<{ type: string; text?: string }>
+  return arr.map((c) => c.text ?? '').join('')
+}
+
+describe('headless create_xlsx', () => {
+  it('writes a values-only workbook with typed cells', async () => {
+    await startService(createSheetsTools(baseDeps()))
+    const result = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: {
+        title: 'Quarterly',
+        data: [
+          ['Item', 'Qty'],
+          ['Widgets', 12],
+          ['Gadgets', 3.5],
+          ['Mixed, comma', 'plain'],
+        ],
+        sheetName: 'Data',
+      },
+    })
+    expect(result.isError).toBeFalsy()
+    const payload = JSON.parse(text(result.content)) as { path: string; cells: number }
+    expect(existsSync(payload.path)).toBe(true)
+    expect(payload.path.endsWith('.xlsx')).toBe(true)
+    expect(payload.cells).toBe(8)
+
+    // unpack: numeric cells carry <v> without inlineStr; text uses inlineStr
+    const zip = await JSZip.loadAsync(await readFile(payload.path))
+    const sheetXml = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
+    const workbookXml = await zip.file('xl/workbook.xml')!.async('string')
+    expect(workbookXml).toContain('Data')
+    expect(sheetXml).toContain('<c r="B2"><v>12</v></c>')
+    expect(sheetXml).toContain('<v>3.5</v>')
+    expect(sheetXml).toContain('Mixed, comma')
+    expect(sheetXml).toContain('Widgets')
+  })
+
+  it('enforces the shared path policy: absolute paths, extension append, clobber guard', async () => {
+    await startService(createSheetsTools(baseDeps()))
+    const relative = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: { title: 'X', data: [[1]], path: 'relative.xlsx' },
+    })
+    expect(relative.isError).toBe(true)
+    expect(text(relative.content)).toMatch(/path must be absolute/)
+
+    const target = join(dir, 'taken')
+    const first = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: { title: 'Taken', data: [[1]], path: target },
+    })
+    expect(first.isError).toBeFalsy()
+    const payload = JSON.parse(text(first.content)) as { path: string }
+    expect(payload.path).toBe(`${target}.xlsx`)
+
+    const second = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: { title: 'Taken', data: [[2]], path: target },
+    })
+    expect(second.isError).toBe(true)
+    expect(text(second.content)).toMatch(/file already exists/)
+  })
+
+  it('rejects malformed data', async () => {
+    await startService(createSheetsTools(baseDeps()))
+    // flat rows fail the input schema before the handler runs
+    const flat = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: { title: 'Flat', data: [1, 2, 3] },
+    })
+    expect(flat.isError).toBe(true)
+    const noTitle = await client!.callTool({
+      name: 'create_xlsx',
+      arguments: { title: ' ', data: [[1]] },
+    })
+    expect(noTitle.isError).toBe(true)
+  })
+
+  it('is hidden when background is off, present when on (session tools unaffected)', async () => {
+    const fake = fakeSheetsControl()
+    await startService(createSheetsTools({ ...baseDeps(false), sheets: fake.control }))
+    let names = (await client!.listTools()).tools.map((t) => t.name)
+    expect(names).not.toContain('create_xlsx')
+    expect(names).toContain('create_sheet')
+
+    await client!.close()
+    await service!.stop()
+    service = undefined
+    await startService(createSheetsTools({ ...baseDeps(true), sheets: fake.control }))
+    names = (await client!.listTools()).tools.map((t) => t.name)
+    expect(names).toContain('create_xlsx')
+  })
+})
+
+/** In-memory SheetsControl standing in for the shell's sheets-bridge */
+function fakeSheetsControl(): { control: SheetsControl; saved: Array<{ path: string }> } {
+  let nextId = 1
+  const saved: Array<{ path: string }> = []
+  return {
+    saved,
+    control: {
+      openBlankTab: async () => nextId++,
+      runCommand: async (wcId, command, payload) => {
+        if (wcId <= 0) throw new Error('no workbook')
+        const p = payload as { path?: string; addresses?: string[]; ops?: unknown[] }
+        if (command === 'save_sheet') {
+          if (p.path === 'D:/nope/blocked.xlsx') throw new Error('file already exists: D:/nope/blocked.xlsx')
+          saved.push({ path: p.path ?? '' })
+          return { ok: true, path: p.path }
+        }
+        if (command === 'read_sheet') {
+          return p.addresses?.length
+            ? { cells: { A1: { value: 'hello', rawValue: 'hello' } } }
+            : { context: { sheetId: 's1', wc: wcId, sheets: [] } }
+        }
+        if (p.ops?.some((o) => (o as { op: string }).op === 'explode')) {
+          return { ok: false, reason: 'boom' }
+        }
+        return { ok: true }
+      },
+    },
+  }
+}
+
+describe('visible grid session tools', () => {
+  it('expose session lifecycle: create, read, apply, save-closes', async () => {
+    const fake = fakeSheetsControl()
+    await startService(createSheetsTools({ ...baseDeps(), sheets: fake.control }))
+
+    const before = await client!.callTool({ name: 'read_sheet', arguments: {} })
+    expect(before.isError).toBe(true)
+    expect(text(before.content)).toMatch(/no workbook is open — call create_sheet first/)
+
+    const created = await client!.callTool({ name: 'create_sheet', arguments: {} })
+    expect(created.isError).toBeFalsy()
+
+    const overview = await client!.callTool({ name: 'read_sheet', arguments: {} })
+    expect(overview.isError).toBeFalsy()
+    expect(text(overview.content)).toContain('"wc": 1')
+
+    const cells = await client!.callTool({
+      name: 'read_sheet',
+      arguments: { addresses: ['A1', 'B2'] },
+    })
+    expect(cells.isError).toBeFalsy()
+    expect(text(cells.content)).toContain('hello')
+
+    const applied = await client!.callTool({
+      name: 'apply_sheet_ops',
+      arguments: { ops: [{ op: 'set_cell', sheetId: 's1', address: 'A1', value: 'x' }] },
+    })
+    expect(applied.isError).toBeFalsy()
+
+    const saved = await client!.callTool({
+      name: 'save_sheet',
+      arguments: { path: join(dir, 'out.xlsx') },
+    })
+    expect(saved.isError).toBeFalsy()
+    expect(fake.saved).toEqual([{ path: join(dir, 'out.xlsx') }])
+
+    // the session ended with the save: further edits must ask for create_sheet
+    const after = await client!.callTool({ name: 'apply_sheet_ops', arguments: { ops: [{ op: 'set_cell' }] } })
+    expect(after.isError).toBe(true)
+    expect(text(after.content)).toMatch(/no workbook is open/)
+  })
+
+  it('surfaces failed applies as errors and forwards dry runs untouched', async () => {
+    const fake = fakeSheetsControl()
+    await startService(createSheetsTools({ ...baseDeps(), sheets: fake.control }))
+    await client!.callTool({ name: 'create_sheet', arguments: {} })
+
+    const failed = await client!.callTool({
+      name: 'apply_sheet_ops',
+      arguments: { ops: [{ op: 'explode' }] },
+    })
+    expect(failed.isError).toBe(true)
+    expect(text(failed.content)).toContain('boom')
+
+    const saved = await client!.callTool({
+      name: 'save_sheet',
+      arguments: { path: 'D:/nope/blocked.xlsx' },
+    })
+    expect(saved.isError).toBe(true)
+    expect(text(saved.content)).toMatch(/already exists/)
+  })
+
+  it('disappear entirely without a control (headless runs keep the file-only surface)', async () => {
+    await startService(createSheetsTools(baseDeps()))
+    const names = (await client!.listTools()).tools.map((t) => t.name)
+    for (const tool of ['create_sheet', 'read_sheet', 'apply_sheet_ops', 'save_sheet']) {
+      expect(names).not.toContain(tool)
+    }
+  })
+})

@@ -58,9 +58,7 @@ function parseJsonOutline(raw: string): OutlineSlide[] {
       { cause: error },
     )
   }
-  const list = Array.isArray(parsed)
-    ? parsed
-    : (parsed as { slides?: unknown } | null)?.slides
+  const list = Array.isArray(parsed) ? parsed : (parsed as { slides?: unknown } | null)?.slides
   if (!Array.isArray(list)) {
     throw new Error('outline JSON must be an array of slides or { slides: [...] }')
   }
@@ -70,17 +68,28 @@ function parseJsonOutline(raw: string): OutlineSlide[] {
       throw new Error(`slide ${index} must be an object or a string`)
     }
     const obj = entry as { title?: unknown; bullets?: unknown; paragraphs?: unknown }
-    const rawBullets = Array.isArray(obj.bullets) ? obj.bullets : Array.isArray(obj.paragraphs) ? obj.paragraphs : []
+    const rawBullets = Array.isArray(obj.bullets)
+      ? obj.bullets
+      : Array.isArray(obj.paragraphs)
+        ? obj.paragraphs
+        : []
     return {
       ...(typeof obj.title === 'string' && obj.title.trim() ? { title: obj.title.trim() } : {}),
       paragraphs: rawBullets.map((b) => {
         if (typeof b === 'string') return { text: b }
         const bl = b as { text?: unknown; level?: unknown; bullet?: unknown; bold?: unknown }
-        if (typeof bl?.text !== 'string') throw new Error(`slide ${index}: each bullet needs a "text" string`)
+        if (typeof bl?.text !== 'string')
+          throw new Error(`slide ${index}: each bullet needs a "text" string`)
         return {
           text: bl.text,
-          ...(bl.bullet === 'number' ? { bullet: 'number' as const } : bl.bullet === 'char' ? { bullet: 'char' as const } : {}),
-          ...(typeof bl.level === 'number' && Number.isInteger(bl.level) && bl.level > 0 ? { level: bl.level } : {}),
+          ...(bl.bullet === 'number'
+            ? { bullet: 'number' as const }
+            : bl.bullet === 'char'
+              ? { bullet: 'char' as const }
+              : {}),
+          ...(typeof bl.level === 'number' && Number.isInteger(bl.level) && bl.level > 0
+            ? { level: bl.level }
+            : {}),
           ...(bl.bold === true ? { bold: true } : {}),
         }
       }),

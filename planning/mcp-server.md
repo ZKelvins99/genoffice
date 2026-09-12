@@ -101,12 +101,12 @@ Registered behind the same `background` switch as `create_docx`.
 **Visible deck session** — `apps/shell/src/main/mcp/slides-bridge.ts` +
 `tools/slides-tools.ts`:
 
-| Tool              | Input                                              | Effect                                                                    |
-| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
-| `create_deck`     | `{}`                                               | opens a new blank slides tab, waits for the renderer's session            |
+| Tool              | Input                                              | Effect                                                                                                             |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `create_deck`     | `{}`                                               | opens a new blank slides tab, waits for the renderer's session                                                     |
 | `apply_slide_ops` | `{ ops, isolation?, dryRun? }` (≤50, EMU geometry) | applies one transaction via `applySessionTxn` — the exact `slides:apply-txn` code path (history, journal, autofit) |
-| `read_deck`       | `{}`                                               | element inventory of every slide (durable ids, text, EMU geometry)        |
-| `save_deck`       | `{ path, overwrite? }`                             | writes via `saveSessionDeckTo` (recents, tab title, dirty reset), ends the session |
+| `read_deck`       | `{}`                                               | element inventory of every slide (durable ids, text, EMU geometry)                                                 |
+| `save_deck`       | `{ path, overwrite? }`                             | writes via `saveSessionDeckTo` (recents, tab title, dirty reset), ends the session                                 |
 
 `applySessionTxn` is extracted from the `slides:apply-txn` IPC handler
 (`apps/slides/src/main/slides-main.ts`) so the app's AI surface and the MCP
@@ -117,6 +117,40 @@ Covered by `apps/shell/tests/mcp/slides-tools.test.ts` (headless + session
 routing) and `e2e/mcp-visible-deck.spec.ts` (real app: visible slides tab →
 ops → saved pptx unpacked and verified). Execution tracked in
 [mcp-phase2-plan.md](./mcp-phase2-plan.md) (M2 = Sheets).
+
+## Phase 2, milestone 2: Sheets (xlsx)
+
+**Headless (values-only).** `create_xlsx` writes a 2D row matrix through the
+same minimal OOXML builder the app's AI `create_document` uses
+(`rowsToXlsxBuffer`, `apps/sheets/src/gateway/csv-import.ts`) — numbers become
+numeric cells, text stays text. Registered behind the `background` switch.
+Formula-fidelity headless writes would need the Rust sidecar pipeline
+(`saveWorkbookViaSidecar`); deliberately deferred (M2.2 in the plan).
+
+**Visible grid session** — the workbook lives in the **renderer** (Univer), so
+unlike slides this needs the docs-style request/response channel:
+
+```
+MCP tool → SheetsControl (apps/shell/src/main/mcp/sheets-bridge.ts)
+         → webContents.send('sheets:mcp-command', {requestId, command, payload})
+         → renderer apps/sheets/src/renderer/mcp-bridge.ts
+              ├─ read_sheet   → AI workbook readers (ai/workbook-readers.ts)
+              ├─ apply_ops    → planFromOps() + applyChangePlan()   (op-executor.ts)
+              └─ save_sheet   → handleSave(…, {path, overwrite})    (save-actions.ts)
+         → webContents.send('sheets:mcp-result', {requestId, ok, result})
+```
+
+| Tool              | Input                      | Effect                                                                                                                                                            |
+| ----------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_sheet`    | `{}`                       | opens a sheets tab on a fresh blank .xlsx (like the app's "new spreadsheet"; the save pipeline needs a real file), waits for the renderer's ready announce        |
+| `read_sheet`      | `{ addresses?, sheetId? }` | workbook overview (sheet ids/names/extents) or cell values + formulas                                                                                             |
+| `apply_sheet_ops` | `{ ops, dryRun? }`         | applies the workbook DSL (set_cell/set_formula/fill_range/add_sheet/add_chart/…) as one undo batch via `applyChangePlan`                                          |
+| `save_sheet`      | `{ path, overwrite? }`     | explicit-path save through the regular sidecar pipeline (new `targetPath`/`overwrite` fields on the save request; dialog-free, clobber-guarded), ends the session |
+
+Ops address sheets by id (learn it from `read_sheet`), cells by A1. Covering
+tests: `apps/shell/tests/mcp/sheets-tools.test.ts` and
+`e2e/mcp-visible-sheet.spec.ts` (real app: visible tab → values + formula →
+saved xlsx with the formula intact).
 
 ## Goal
 

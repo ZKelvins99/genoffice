@@ -75,10 +75,7 @@ function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
         .describe(
           'Markdown outline (default) or a JSON string of {"slides":[...]} when format is "json"',
         ),
-      format: z
-        .enum(['markdown', 'json'])
-        .optional()
-        .describe('outline format; default markdown'),
+      format: z.enum(['markdown', 'json']).optional().describe('outline format; default markdown'),
       path: z
         .string()
         .optional()
@@ -115,7 +112,11 @@ function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
         }
       }
       await savePptxToFile(opened, targetPath)
-      return { path: targetPath, slides: opened.deck.slides.length, bytes: statSync(targetPath).size }
+      return {
+        path: targetPath,
+        slides: opened.deck.slides.length,
+        bytes: statSync(targetPath).size,
+      }
     },
   }
 }
@@ -165,7 +166,8 @@ function createDeckSessionTools(deps: SlidesToolDeps): McpToolDefinition[] {
         return {
           ok: true,
           deckId: activeDeckWc,
-          message: 'A new empty presentation is open in GenOffice. Build slides, then call save_deck.',
+          message:
+            'A new empty presentation is open in GenOffice. Build slides, then call save_deck.',
         }
       },
     },
@@ -190,10 +192,7 @@ function createDeckSessionTools(deps: SlidesToolDeps): McpToolDefinition[] {
         'changes nothing — fix the op named in the error and resend the whole batch. ' +
         'Use read_deck for ids and geometry first.',
       inputSchema: {
-        ops: z
-          .array(z.any())
-          .describe('array of op objects (at most 50 per transaction)')
-          .max(50),
+        ops: z.array(z.any()).describe('array of op objects (at most 50 per transaction)').max(50),
         isolation: z
           .enum(['atomic', 'per_op'])
           .optional()

@@ -134,6 +134,7 @@ import {
 import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
 import { createDocsControl, installDocsBridge } from './mcp/docs-bridge'
 import { createSlidesControl } from './mcp/slides-bridge'
+import { createSheetsControl, installSheetsBridge } from './mcp/sheets-bridge'
 import {
   configureSheetsRuntime,
   hasActiveQueuedWorkbook,
@@ -2810,6 +2811,25 @@ function openBlankSlidesTabForMcp(): number {
   return view.webContents.id
 }
 
+/**
+ * MCP: open a blank sheets tab and return its webContents id, for the
+ * visible-grid bridge. Like the app's own "new spreadsheet", a real blank
+ * .xlsx is created up front (the save pipeline needs an on-disk workbook;
+ * the fallback in-memory demo grid cannot save) — but the AI auto-rename
+ * marking is skipped, the file name is the agent's business.
+ */
+async function openBlankSheetsTabForMcp(): Promise<number> {
+  if (!tabManager) throw new Error('GenOffice is not ready')
+  const filePath = uniquePathIn(defaultSaveDir(), `${tm('untitledSheet')}.xlsx`)
+  writeFileSync(filePath, await blankXlsxBuffer())
+  const tabId = tabManager.openSheetsTab(filePath)
+  const view = tabManager.sheetsTabs().find((t) => t.id === tabId)
+  if (!view) throw new Error('the new spreadsheet tab could not be opened')
+  recordStarPromptDocOpen()
+  analytics.track('file_new', { kind: 'xlsx' })
+  return view.webContents.id
+}
+
 function newSlideTab(): void {
   try {
     tabManager?.openSlidesTab()
@@ -4410,6 +4430,7 @@ app.whenReady().then(async () => {
   // Register the docs renderer bridge listeners before the MCP server can take
   // a visible-editing request.
   installDocsBridge()
+  installSheetsBridge()
   // MCP server: localhost-only, docx generation for external agents. Deps are
   // injected so the mcp module never imports this file back.
   configureMcpRuntime({
@@ -4418,6 +4439,7 @@ app.whenReady().then(async () => {
     openPath: (filePath) => routeDocumentPath(filePath),
     docsControl: createDocsControl({ openBlankTab: () => openBlankDocsTabForMcp() }),
     slidesControl: createSlidesControl({ openBlankTab: () => openBlankSlidesTabForMcp() }),
+    sheetsControl: createSheetsControl({ openBlankTab: () => openBlankSheetsTabForMcp() }),
     logFilePath: join(app.getPath('userData'), 'mcp-log.txt'),
   })
   void startMcpFromSettings(currentMcpSettings()).catch((error) => {
