@@ -27,7 +27,15 @@ export function localTimestamp(date = new Date()): string {
 export class McpLogger {
   private readonly buffer: string[] = []
 
-  constructor(readonly filePath: string) {}
+  constructor(readonly filePath: string) {
+    // the log covers the current app launch only: reset the file at startup so
+    // it never grows across runs (the settings pane reads it live anyway)
+    try {
+      writeFileSync(this.filePath, '', 'utf8')
+    } catch {
+      // best-effort; append() recreates what it can
+    }
+  }
 
   append(message: string): void {
     const line = `[${localTimestamp()}] ${message}`

@@ -63,10 +63,17 @@ describe('McpLogger', () => {
     expect(tail[9]).toContain('line 29')
   })
 
-  it('recent() falls back to the ring when the file is missing', () => {
-    logger.append('[mcp] only in memory')
-    const stale = new McpLogger(join(dir, 'other.txt'))
-    expect(stale.recent()).toEqual([])
+  it('starts each logger with a fresh file (per-launch log, not persisted across runs)', () => {
+    logger.append('[mcp] line from a previous run')
+    // a new app launch constructs a fresh logger over the same path: the old
+    // content is gone, the new run's lines start from zero
+    const fresh = new McpLogger(logPath)
+    expect(fresh.recent()).toEqual([])
+    expect(readFileSync(logPath, 'utf8')).toBe('')
+    fresh.append('[mcp] new run')
+    const lines = fresh.recent()
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('[mcp] new run')
   })
 
   it('clear() truncates the file and the ring', () => {
@@ -77,10 +84,11 @@ describe('McpLogger', () => {
     expect(readFileSync(logPath, 'utf8')).toBe('')
   })
 
-  it('ensureFile() creates an empty file so reveal has a target', () => {
-    expect(existsSync(logPath)).toBe(false)
-    logger.ensureFile()
+  it('the file exists from construction on (ensureFile is a safe no-op)', () => {
+    // the constructor resets the file, so "reveal in file manager" always has
+    // a target without calling ensureFile first
     expect(existsSync(logPath)).toBe(true)
+    logger.ensureFile()
     expect(readFileSync(logPath, 'utf8')).toBe('')
   })
 })

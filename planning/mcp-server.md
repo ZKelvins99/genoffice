@@ -362,10 +362,13 @@ and exact parity with the app possible.
   `mcp.json` example, each with a copy button), a **Logging** toggle with an
   in-pane log viewer (tail of `userData/mcp-log.txt`; 2s poll + manual
   refresh, auto-follows the tail; reveal-in-file-manager and clear actions;
-  `McpLogger` ring + append in `apps/shell/src/main/mcp/mcp-logger.ts`, tool
-  calls logged by `mcp-server.ts`)
-  and an **Available capabilities** group (Documents live; Sheets/Slides/PDF
-  announced as upcoming) so future tool families slot in as new rows.
+  `McpLogger` ring + append in `apps/shell/src/main/mcp/mcp-logger.ts` with
+  device-local timestamps — the file covers the current app launch only, it is
+  reset at startup, tool calls logged by `mcp-server.ts`)
+  and an **Available capabilities** group (rows driven by
+  `McpStatus.capabilities` — Documents/Slides/Sheets live per registered
+  control; PDF announced as upcoming) so future tool families slot in as new
+  rows.
   Default **off**.
 
 ## Security
