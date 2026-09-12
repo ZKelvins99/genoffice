@@ -12,13 +12,25 @@ const MAX_BUFFER_LINES = 500
 /** how many lines the settings pane fetches at once */
 export const MCP_LOG_TAIL = 200
 
+/** Device-local timestamp for log lines (YYYY-MM-DD HH:mm:ss.SSS): the log is
+ *  read by the user in the settings pane / a shared file, so it shows wall-clock
+ *  time, not UTC (toISOString's Z suffix read as a 8h-off time in zh locales). */
+export function localTimestamp(date = new Date()): string {
+  const pad = (value: number, width = 2): string => String(value).padStart(width, '0')
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.` +
+    `${pad(date.getMilliseconds(), 3)}`
+  )
+}
+
 export class McpLogger {
   private readonly buffer: string[] = []
 
   constructor(readonly filePath: string) {}
 
   append(message: string): void {
-    const line = `[${new Date().toISOString()}] ${message}`
+    const line = `[${localTimestamp()}] ${message}`
     this.buffer.push(line)
     if (this.buffer.length > MAX_BUFFER_LINES) this.buffer.shift()
     try {

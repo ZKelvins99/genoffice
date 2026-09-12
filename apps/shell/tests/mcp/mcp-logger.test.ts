@@ -29,11 +29,30 @@ describe('McpLogger', () => {
     const lines = logger.recent()
     expect(lines).toHaveLength(2)
     expect(lines[1]).toContain('[mcp] tool create_docx ok (12ms)')
-    // ISO timestamp prefix
-    expect(lines[0]).toMatch(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+    // local-time timestamp prefix (YYYY-MM-DD HH:mm:ss.SSS)
+    expect(lines[0]).toMatch(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]/)
 
     const onDisk = readFileSync(logPath, 'utf8').split('\n').filter(Boolean)
     expect(onDisk).toHaveLength(2)
+  })
+
+  it('timestamps are device-local wall-clock time, not UTC', () => {
+    logger.append('tz check')
+    const line = logger.recent()[0] ?? ''
+    const m = /^\[(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})\]/.exec(line)
+    expect(m, line).not.toBeNull()
+    // interpreting the stamp in the device timezone lands ~now; a UTC ISO
+    // stamp (the old format) drifts by the timezone offset here
+    const parsed = new Date(
+      Number(m![1]),
+      Number(m![2]) - 1,
+      Number(m![3]),
+      Number(m![4]),
+      Number(m![5]),
+      Number(m![6]),
+      Number(m![7]),
+    )
+    expect(Math.abs(parsed.getTime() - Date.now())).toBeLessThan(5_000)
   })
 
   it('recent() prefers the file contents and caps the tail', () => {
