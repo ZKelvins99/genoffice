@@ -12,7 +12,9 @@ tools in `.../mcp/tools/document-tools.ts`, the stdio bridge at
 `scripts/mcp-stdio-bridge.js`, and shell wiring in `apps/shell/src/main/index.ts`.
 
 Deliberately deferred: editing an existing docx, PDF/PPT conversion,
-spreadsheets, and image fetching in markdown (phase 2 below).
+spreadsheets, and image fetching in markdown (phase 2 below). Feasibility for
+the Sheets/Slides/PDF capability rows is worked out in
+[mcp-phase2-feasibility.md](./mcp-phase2-feasibility.md).
 
 The reference implementation is the sibling project **Tabby-MCP** (a Tabby
 terminal plugin that embeds an MCP server). We copied its server shape, not its
@@ -283,9 +285,21 @@ and exact parity with the app possible.
 - Add channels to `HOME_CHANNELS` (`apps/shell/src/shared/home-api.ts:313`),
   register with `ipcMain.handle` (pattern at `apps/shell/src/main/index.ts:3141`),
   expose in `apps/shell/src/preload/index.ts` (pattern at `:343`).
-- UI: a toggle (and port field) in the general pane of
-  `apps/shell/src/renderer/src/SettingsModal.tsx` (~line 1149), matching the
-  existing `set-switch` rows. Default **off**.
+- UI: the MCP pane in `apps/shell/src/renderer/src/SettingsModal.tsx`
+  (`setSecMcp` nav item; originally a General-pane toggle, now its own section).
+  It carries the enable switch with a running/stopped status dot, the port
+  field, a **Background generation** toggle (off by default: the default
+  surface is the visible document session; on: the headless `create_docx` is
+  registered too — a flip restarts the server so `tools/list` updates), a
+  **Connection** group (Streamable HTTP + SSE + health URLs and a client
+  `mcp.json` example, each with a copy button), a **Logging** toggle with an
+  in-pane log viewer (tail of `userData/mcp-log.txt`; 2s poll + manual
+  refresh, auto-follows the tail; reveal-in-file-manager and clear actions;
+  `McpLogger` ring + append in `apps/shell/src/main/mcp/mcp-logger.ts`, tool
+  calls logged by `mcp-server.ts`)
+  and an **Available capabilities** group (Documents live; Sheets/Slides/PDF
+  announced as upcoming) so future tool families slot in as new rows.
+  Default **off**.
 
 ## Security
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AI_CUSTOM_FONT_MAX_PX,
@@ -259,6 +259,45 @@ function Field({
       </div>
       {action}
     </div>
+  )
+}
+
+/** copies the given text; the label flips to "Copied" for a moment as feedback */
+function CopyTextButton({ text, label }: { text: string; label?: string }) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    },
+    [],
+  )
+  return (
+    <button
+      className="set-btn"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(
+          () => {
+            setCopied(true)
+            if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+            timerRef.current = window.setTimeout(() => setCopied(false), 1600)
+          },
+          () => {},
+        )
+      }}
+    >
+      {copied ? t('setMcpCopied') : (label ?? t('setMcpCopy'))}
+    </button>
+  )
+}
+
+/** mcp.json snippet a client needs to reach the local server */
+function mcpConfigExample(port: string): string {
+  return JSON.stringify(
+    { mcpServers: { genoffice: { url: `http://127.0.0.1:${port}/mcp` } } },
+    null,
+    2,
   )
 }
 
@@ -1020,10 +1059,68 @@ export function SettingsModal({
   const [mcpPort, setMcpPort] = useState('3093')
   const [mcpError, setMcpError] = useState('')
   const [mcpSaving, setMcpSaving] = useState(false)
+  const [mcpBackground, setMcpBackground] = useState(false)
+  const [mcpLogging, setMcpLogging] = useState(false)
+  const [mcpLogs, setMcpLogs] = useState<string[]>([])
+  const logViewRef = useRef<HTMLPreElement | null>(null)
   const [aiPrefs, setAiPrefs] = useState<AiPanelPrefs>(DEFAULT_AI_PANEL_PREFS)
   const [channel, setChannel] = useState<'stable' | 'beta'>('stable')
   const [appVersion, setAppVersion] = useState('')
   const [githubStars, setGithubStars] = useState<number | null>(null)
+
+  /**
+   * Apply an MCP settings patch: always sends the full current snapshot plus the
+   * changed field (the main process persists and applies atomically, restarting
+   * the server when the port or the exposed tool set changes).
+   */
+  const applyMcp = (patch: {
+    enabled?: boolean
+    port?: number
+    background?: boolean
+    logging?: boolean
+  }) => {
+    setMcpSaving(true)
+    void window.aiOffice
+      .setMcpSettings({
+        enabled: patch.enabled ?? mcpEnabled,
+        port: patch.port ?? (Number(mcpPort) || 3093),
+        background: patch.background ?? mcpBackground,
+        logging: patch.logging ?? mcpLogging,
+      })
+      .then((s) => {
+        setMcpRunning(s.running)
+        setMcpEnabled(s.enabled)
+        setMcpPort(String(s.port))
+        setMcpBackground(s.background)
+        setMcpLogging(s.logging)
+        setMcpError(s.error ?? '')
+      })
+      .catch(() => {})
+      .finally(() => setMcpSaving(false))
+  }
+
+  /** tail of the MCP log for the in-pane viewer */
+  const fetchMcpLogs = useCallback(() => {
+    void window.aiOffice
+      .getMcpLogs?.()
+      .then((lines) => setMcpLogs(Array.isArray(lines) ? lines : []))
+      .catch(() => {})
+  }, [])
+
+  // poll while the logging pane is visible: entries land as tools run
+  useEffect(() => {
+    if (section !== 'mcp' || !mcpLogging) return
+    fetchMcpLogs()
+    const timer = window.setInterval(fetchMcpLogs, 2000)
+    return () => window.clearInterval(timer)
+  }, [section, mcpLogging, fetchMcpLogs])
+
+  // follow the tail (newest entries last), but never fight a reader who scrolled up
+  useEffect(() => {
+    const el = logViewRef.current
+    if (!el) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48) el.scrollTop = el.scrollHeight
+  }, [mcpLogs])
 
   useEffect(() => {
     let alive = true
@@ -1044,6 +1141,8 @@ export function SettingsModal({
       setMcpRunning(s.running)
       setMcpEnabled(s.enabled)
       setMcpPort(String(s.port))
+      setMcpBackground(s.background)
+      setMcpLogging(s.logging)
       setMcpError(s.error ?? '')
     })
     void window.aiOffice.getAiPanelPrefs?.().then((prefs) => {
@@ -1313,15 +1412,20 @@ export function SettingsModal({
             {section === 'mcp' && (
               <>
                 <h3 className="set-pane-title">{t('setSecMcp')}</h3>
-                <div className="set-field">
+                <div className="set-field set-field-top">
                   <div className="set-field-text">
                     <div className="set-field-stack">
                       <div className="set-field-label">{t('setMcp')}</div>
                       <div className="set-field-desc">{t('setMcpDesc')}</div>
-                      {mcpError ? <div className="set-field-desc">{mcpError}</div> : null}
-                      {mcpRunning && !mcpError ? (
-                        <div className="set-field-desc">{`http://127.0.0.1:${mcpPort}/mcp`}</div>
-                      ) : null}
+                      <div className="set-field-desc set-mcp-status">
+                        <span
+                          className={`set-status-dot${mcpError ? ' error' : mcpRunning ? ' running' : ''}`}
+                          aria-hidden="true"
+                        />
+                        <span>
+                          {mcpError || (mcpRunning ? t('setMcpRunning') : t('setMcpStopped'))}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1330,20 +1434,7 @@ export function SettingsModal({
                     aria-checked={mcpEnabled}
                     aria-label={t('setMcp')}
                     disabled={mcpSaving}
-                    onClick={() => {
-                      const next = !mcpEnabled
-                      setMcpSaving(true)
-                      void window.aiOffice
-                        .setMcpSettings({ enabled: next, port: Number(mcpPort) || 3093 })
-                        .then((s) => {
-                          setMcpRunning(s.running)
-                          setMcpEnabled(s.enabled)
-                          setMcpPort(String(s.port))
-                          setMcpError(s.error ?? '')
-                        })
-                        .catch(() => {})
-                        .finally(() => setMcpSaving(false))
-                    }}
+                    onClick={() => applyMcp({ enabled: !mcpEnabled })}
                   />
                 </div>
                 <div className="set-field">
@@ -1369,20 +1460,108 @@ export function SettingsModal({
                         return
                       }
                       if (!mcpEnabled) return
-                      setMcpSaving(true)
-                      void window.aiOffice
-                        .setMcpSettings({ enabled: mcpEnabled, port })
-                        .then((s) => {
-                          setMcpRunning(s.running)
-                          setMcpEnabled(s.enabled)
-                          setMcpPort(String(s.port))
-                          setMcpError(s.error ?? '')
-                        })
-                        .catch(() => {})
-                        .finally(() => setMcpSaving(false))
+                      applyMcp({ port })
                     }}
                   />
                 </div>
+                <div className="set-field set-field-top">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
+                      <div className="set-field-label">{t('setMcpBg')}</div>
+                      <div className="set-field-desc">{t('setMcpBgDesc')}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="set-switch"
+                    role="switch"
+                    aria-checked={mcpBackground}
+                    aria-label={t('setMcpBg')}
+                    disabled={mcpSaving}
+                    onClick={() => applyMcp({ background: !mcpBackground })}
+                  />
+                </div>
+                <h4 className="set-group-title">{t('setMcpConn')}</h4>
+                <Field
+                  label={t('setMcpUrlHttp')}
+                  value={`http://127.0.0.1:${mcpPort}/mcp`}
+                  action={<CopyTextButton text={`http://127.0.0.1:${mcpPort}/mcp`} />}
+                />
+                <Field
+                  label={t('setMcpUrlSse')}
+                  value={`http://127.0.0.1:${mcpPort}/sse`}
+                  action={<CopyTextButton text={`http://127.0.0.1:${mcpPort}/sse`} />}
+                />
+                <Field
+                  label={t('setMcpHealth')}
+                  value={`http://127.0.0.1:${mcpPort}/health`}
+                  action={<CopyTextButton text={`http://127.0.0.1:${mcpPort}/health`} />}
+                />
+                <div className="set-config-block">
+                  <div className="set-config-head">
+                    <div className="set-field-stack">
+                      <div className="set-field-label">{t('setMcpConfig')}</div>
+                      <div className="set-field-desc">{t('setMcpConfigDesc')}</div>
+                    </div>
+                    <CopyTextButton text={mcpConfigExample(mcpPort)} />
+                  </div>
+                  <pre className="set-code">{mcpConfigExample(mcpPort)}</pre>
+                </div>
+                <h4 className="set-group-title">{t('setMcpLog')}</h4>
+                <div className="set-field set-field-top">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
+                      <div className="set-field-label">{t('setMcpLog')}</div>
+                      <div className="set-field-desc">{t('setMcpLogDesc')}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="set-switch"
+                    role="switch"
+                    aria-checked={mcpLogging}
+                    aria-label={t('setMcpLog')}
+                    disabled={mcpSaving}
+                    onClick={() => applyMcp({ logging: !mcpLogging })}
+                  />
+                </div>
+                {mcpLogging && (
+                  <div className="set-config-block">
+                    <div className="set-config-head">
+                      <div className="set-field-stack">
+                        <div className="set-field-label">{t('setMcpLogFile')}</div>
+                        <div className="set-field-desc">mcp-log.txt</div>
+                      </div>
+                      <div className="set-btn-row">
+                        <button className="set-btn" onClick={fetchMcpLogs}>
+                          {t('setMcpLogRefresh')}
+                        </button>
+                        <button
+                          className="set-btn"
+                          onClick={() => void window.aiOffice.openMcpLogFile?.()}
+                        >
+                          {t('setMcpLogOpen')}
+                        </button>
+                        <button
+                          className="set-btn"
+                          onClick={() => {
+                            void window.aiOffice.clearMcpLogs?.().then(fetchMcpLogs)
+                          }}
+                        >
+                          {t('setMcpLogClear')}
+                        </button>
+                      </div>
+                    </div>
+                    <pre ref={logViewRef} className="set-code set-log">
+                      {mcpLogs.length > 0 ? (
+                        mcpLogs.join('\n')
+                      ) : (
+                        <span className="set-log-empty">{t('setMcpLogEmpty')}</span>
+                      )}
+                    </pre>
+                  </div>
+                )}
+                <h4 className="set-group-title">{t('setMcpCap')}</h4>
+                <Field label={t('setMcpCapDocs')} value={t('setMcpCapDocsDesc')} />
+                <Field label={t('setMcpCapPlanned')} value={t('setMcpCapSoon')} />
               </>
             )}
             {section === 'about' && (

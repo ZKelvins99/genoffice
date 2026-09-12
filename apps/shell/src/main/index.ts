@@ -121,8 +121,12 @@ import { blankXlsxBuffer } from '../../../sheets/src/gateway/csv-import'
 import { blankPdfBuffer } from '../../../pdf/src/main/blank-pdf'
 import {
   applyMcpSettings,
+  clearMcpLogs,
   configureMcpRuntime,
+  getMcpRecentLogs,
+  mcpLogFilePath,
   mcpStatus,
+  revealMcpLogFile,
   startMcpFromSettings,
   stopMcpSync,
   type McpSettings,
@@ -389,6 +393,8 @@ function currentMcpSettings(): McpSettings {
       typeof port === 'number' && Number.isInteger(port) && port > 0 && port < 65536
         ? port
         : DEFAULT_MCP_PORT,
+    background: saved.mcpBackground === true,
+    logging: saved.mcpLogging === true,
   }
 }
 
@@ -3175,7 +3181,12 @@ function registerHomeIpc(): void {
 
   ipcMain.handle(HOME_CHANNELS.setMcpSettings, async (_event, patch: unknown) => {
     if (!patch || typeof patch !== 'object') return mcpStatus()
-    const request = patch as { enabled?: unknown; port?: unknown }
+    const request = patch as {
+      enabled?: unknown
+      port?: unknown
+      background?: unknown
+      logging?: unknown
+    }
     const current = currentMcpSettings()
     const enabled = typeof request.enabled === 'boolean' ? request.enabled : current.enabled
     const port =
@@ -3185,13 +3196,33 @@ function registerHomeIpc(): void {
       request.port < 65536
         ? request.port
         : current.port
-    writeAppSettings(APP_SETTINGS_PATH(), { mcpEnabled: enabled, mcpPort: port })
+    const background =
+      typeof request.background === 'boolean' ? request.background : current.background
+    const logging = typeof request.logging === 'boolean' ? request.logging : current.logging
+    writeAppSettings(APP_SETTINGS_PATH(), {
+      mcpEnabled: enabled,
+      mcpPort: port,
+      mcpBackground: background,
+      mcpLogging: logging,
+    })
     try {
-      return await applyMcpSettings({ enabled, port })
+      return await applyMcpSettings({ enabled, port, background, logging })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return { ...mcpStatus(), error: message }
     }
+  })
+
+  ipcMain.handle(HOME_CHANNELS.getMcpLogs, () => getMcpRecentLogs())
+
+  ipcMain.handle(HOME_CHANNELS.clearMcpLogs, () => {
+    clearMcpLogs()
+  })
+
+  ipcMain.handle(HOME_CHANNELS.openMcpLogFile, () => {
+    revealMcpLogFile()
+    const logPath = mcpLogFilePath()
+    if (logPath) shell.showItemInFolder(logPath)
   })
 
   ipcMain.handle(HOME_CHANNELS.getAnalyticsEnabled, (): boolean => analyticsEnabled())
@@ -4374,6 +4405,7 @@ app.whenReady().then(async () => {
     defaultSaveDir: () => defaultSaveDir(),
     openPath: (filePath) => routeDocumentPath(filePath),
     docsControl: createDocsControl({ openBlankTab: () => openBlankDocsTabForMcp() }),
+    logFilePath: join(app.getPath('userData'), 'mcp-log.txt'),
   })
   void startMcpFromSettings(currentMcpSettings()).catch((error) => {
     console.error('[mcp] failed to start on boot:', error)

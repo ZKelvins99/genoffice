@@ -207,6 +207,28 @@ describe('M3 docx tools', () => {
   })
 })
 
+describe('background generation gating', () => {
+  it('hides create_docx when background is off, keeps the read/open/info tools', () => {
+    const names = createDocumentTools({
+      version: 'x',
+      defaultSaveDir: () => dir,
+      background: false,
+    }).map((t) => t.name)
+    expect(names).not.toContain('create_docx')
+    expect(names).toContain('read_docx')
+    expect(names).toContain('open_in_genoffice')
+    expect(names).toContain('get_app_info')
+  })
+
+  it('exposes create_docx by default and when background is on', () => {
+    const base = { version: 'x', defaultSaveDir: () => dir }
+    expect(createDocumentTools(base).map((t) => t.name)).toContain('create_docx')
+    expect(createDocumentTools({ ...base, background: true }).map((t) => t.name)).toContain(
+      'create_docx',
+    )
+  })
+})
+
 describe('path policy helpers', () => {
   it('sanitizes illegal filename characters', () => {
     expect(sanitizeFileBase('a/b:c*d?')).toBe('a_b_c_d_')

@@ -1,4 +1,5 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
+import { McpLogger } from './mcp-logger'
 import { createDocumentTools, type DocsControl } from './tools/document-tools'
 
 /**
@@ -19,27 +20,66 @@ export interface McpRuntimeDeps {
   openPath: (filePath: string) => boolean
   /** drive a visible docs editor (live document session); absent in headless runs */
   docsControl?: DocsControl
-  logger?: (message: string) => void
+  /** where the MCP log file lives (userData); logging is unavailable without it */
+  logFilePath?: string
 }
 
 export interface McpSettings {
   enabled: boolean
   port: number
+  /** headless create_docx (no UI) is exposed to clients; default off */
+  background: boolean
+  /** server/tool activity is written to the log file; default off */
+  logging: boolean
 }
 
 export interface McpStatus {
   running: boolean
   enabled: boolean
   port: number
+  background: boolean
+  logging: boolean
   url: string | null
 }
 
 let deps: McpRuntimeDeps | null = null
 let service: McpServerService | null = null
-let currentSettings: McpSettings = { enabled: false, port: DEFAULT_MCP_PORT }
+let logger: McpLogger | null = null
+let currentSettings: McpSettings = {
+  enabled: false,
+  port: DEFAULT_MCP_PORT,
+  background: false,
+  logging: false,
+}
 
 export function configureMcpRuntime(runtimeDeps: McpRuntimeDeps): void {
   deps = runtimeDeps
+  logger = runtimeDeps.logFilePath ? new McpLogger(runtimeDeps.logFilePath) : null
+}
+
+/** drops a line into the log ring + file when logging is on; no-op otherwise */
+function mcpLogger(message: string): void {
+  if (!currentSettings.logging) return
+  logger?.append(message)
+}
+
+/** the configured log file path, when logging is available at all */
+export function mcpLogFilePath(): string | null {
+  return deps?.logFilePath ?? null
+}
+
+/** recent log lines for the settings pane */
+export function getMcpRecentLogs(): string[] {
+  return logger?.recent() ?? []
+}
+
+export function clearMcpLogs(): void {
+  logger?.clear()
+}
+
+/** reveal the log file in the file manager; creates it when missing */
+export function revealMcpLogFile(): void {
+  logger?.ensureFile()
 }
 
 function buildTools(): McpToolDefinition[] {
@@ -47,6 +87,9 @@ function buildTools(): McpToolDefinition[] {
   return createDocumentTools({
     version: deps.version,
     defaultSaveDir: deps.defaultSaveDir,
+    // headless create_docx is opt-in: off by default so the default surface is
+    // the visible document session
+    background: currentSettings.background,
     // open_in_genoffice reports ok only when the file routed to a tab
     openInTab: (filePath) => {
       if (!deps) return
@@ -63,7 +106,7 @@ function ensureService(): McpServerService {
     service = new McpServerService({
       port: currentSettings.port,
       tools: buildTools(),
-      logger: deps.logger,
+      logger: mcpLogger,
     })
   }
   return service
@@ -79,21 +122,25 @@ export async function startMcpFromSettings(settings: McpSettings): Promise<void>
 /**
  * Apply a settings change: persist semantics are the caller's job (index.ts
  * writes app-settings.json); here we reconcile the running server with the new
- * values — start, stop, or restart on a port change.
+ * values — start, stop, or restart when the port or the exposed tool set changes.
  */
 export async function applyMcpSettings(settings: McpSettings): Promise<McpStatus> {
   const next = normalize(settings)
   const wasRunning = service?.isRunning() ?? false
+  // both comparisons read the OLD settings: they must happen before currentSettings is overwritten
   const portChanged = next.port !== currentSettings.port
+  const backgroundChanged = next.background !== currentSettings.background
   currentSettings = next
 
   if (!next.enabled) {
     await service?.stop()
     return mcpStatus()
   }
+  // a background flip changes the exposed tool list, so live sessions must be
+  // dropped and rebuilt — same treatment as a port change
   if (!wasRunning) {
     await ensureService().start(next.port)
-  } else if (portChanged) {
+  } else if (portChanged || backgroundChanged) {
     await service?.stop()
     service = null
     await ensureService().start(next.port)
@@ -115,6 +162,8 @@ export function mcpStatus(): McpStatus {
     running,
     enabled: currentSettings.enabled,
     port: currentSettings.port,
+    background: currentSettings.background,
+    logging: currentSettings.logging,
     url: running ? service!.getUrl() : null,
   }
 }
@@ -124,5 +173,10 @@ function normalize(settings: McpSettings): McpSettings {
     Number.isInteger(settings.port) && settings.port > 0 && settings.port < 65536
       ? settings.port
       : DEFAULT_MCP_PORT
-  return { enabled: settings.enabled === true, port }
+  return {
+    enabled: settings.enabled === true,
+    port,
+    background: settings.background === true,
+    logging: settings.logging === true,
+  }
 }

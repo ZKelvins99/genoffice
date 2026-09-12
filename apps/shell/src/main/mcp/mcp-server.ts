@@ -91,11 +91,14 @@ export class McpServerService {
           ...(tool.inputSchema ? { inputSchema: tool.inputSchema } : {}),
         },
         (async (args: Record<string, unknown>) => {
+          const started = Date.now()
           try {
             const result = await tool.handler(args ?? {})
+            this.logger(`[mcp] tool ${tool.name} ok (${Date.now() - started}ms)`)
             return { content: [{ type: 'text' as const, text: stringifyResult(result) }] }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
+            this.logger(`[mcp] tool ${tool.name} error (${Date.now() - started}ms): ${message}`)
             return { content: [{ type: 'text' as const, text: message }], isError: true }
           }
         }) as never,

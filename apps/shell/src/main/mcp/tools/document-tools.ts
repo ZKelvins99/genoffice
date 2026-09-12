@@ -19,6 +19,9 @@ export interface DocToolDeps {
   version: string
   /** directory generated files land in when the caller gives no path */
   defaultSaveDir: () => string
+  /** expose the headless create_docx tool (generation without opening the UI);
+   *  default true — the shell passes the user's "background generation" setting */
+  background?: boolean
   /** open a file in the GenOffice UI; wired in M4 (optional in tests) */
   openInTab?: (filePath: string) => Promise<void> | void
   /** visible-editor control for the MCP-driven document session (optional in tests) */
@@ -88,68 +91,74 @@ export function resolveTargetPath(
   return finalPath
 }
 
+/** the phase-1 headless tool: markdown/blocks -> docx bytes written straight to disk */
+function createHeadlessDocxTool(deps: DocToolDeps): McpToolDefinition {
+  return {
+    name: 'create_docx',
+    description:
+      'Create a Word .docx file from content and save it to disk without opening the app UI. ' +
+      'By default `content` is Markdown (headings, lists, bold/italic, links, code blocks, tables) and is ' +
+      'converted by GenOffice\'s own docx engine. Use format:"blocks" to pass docx-engine SaveBlock ' +
+      'objects instead. Returns the absolute path of the written file.',
+    inputSchema: {
+      title: z.string().describe('document title, used as the file name'),
+      content: z
+        .string()
+        .describe(
+          'Markdown source (default) or a JSON string of SaveBlock[] when format is "blocks"',
+        ),
+      format: z
+        .enum(['markdown', 'blocks'])
+        .optional()
+        .describe('content format; default markdown'),
+      path: z
+        .string()
+        .optional()
+        .describe('absolute output path; default is a new file in the default save folder'),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe('allow replacing an existing file at `path`; default false'),
+    },
+    handler: async (args) => {
+      const title = String(args.title ?? '').trim()
+      if (!title) throw new Error('title must not be empty')
+
+      const format: DocxSourceFormat = args.format === 'blocks' ? 'blocks' : 'markdown'
+      let content: string | unknown[]
+      if (format === 'blocks') {
+        try {
+          const parsed = typeof args.content === 'string' ? JSON.parse(args.content) : args.content
+          if (!Array.isArray(parsed)) throw new Error('blocks content must be an array')
+          content = parsed
+        } catch (error) {
+          throw new Error(
+            `format "blocks" requires content to be a JSON array: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          )
+        }
+      } else {
+        content = String(args.content ?? '')
+      }
+
+      const targetPath = resolveTargetPath(
+        deps,
+        title,
+        typeof args.path === 'string' ? args.path : undefined,
+        args.overwrite === true,
+      )
+      const bytes = await createDocxBytes({ format, content: content as string })
+      await atomicWriteFile(targetPath, Buffer.from(bytes))
+      return { path: targetPath, bytes: bytes.byteLength }
+    },
+  }
+}
+
 export function createDocumentTools(deps: DocToolDeps): McpToolDefinition[] {
   return [
-    {
-      name: 'create_docx',
-      description:
-        'Create a Word .docx file from content and save it to disk. By default `content` is Markdown ' +
-        "(headings, lists, bold/italic, links, code blocks, tables) and is converted by GenOffice's own " +
-        'docx engine. Use format:"blocks" to pass docx-engine SaveBlock objects instead. ' +
-        'Returns the absolute path of the written file.',
-      inputSchema: {
-        title: z.string().describe('document title, used as the file name'),
-        content: z
-          .string()
-          .describe(
-            'Markdown source (default) or a JSON string of SaveBlock[] when format is "blocks"',
-          ),
-        format: z
-          .enum(['markdown', 'blocks'])
-          .optional()
-          .describe('content format; default markdown'),
-        path: z
-          .string()
-          .optional()
-          .describe('absolute output path; default is a new file in the default save folder'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('allow replacing an existing file at `path`; default false'),
-      },
-      handler: async (args) => {
-        const title = String(args.title ?? '').trim()
-        if (!title) throw new Error('title must not be empty')
-
-        const format: DocxSourceFormat = args.format === 'blocks' ? 'blocks' : 'markdown'
-        let content: string | unknown[]
-        if (format === 'blocks') {
-          try {
-            const parsed =
-              typeof args.content === 'string' ? JSON.parse(args.content) : args.content
-            if (!Array.isArray(parsed)) throw new Error('blocks content must be an array')
-            content = parsed
-          } catch (error) {
-            throw new Error(
-              `format "blocks" requires content to be a JSON array: ${error instanceof Error ? error.message : String(error)}`,
-              { cause: error },
-            )
-          }
-        } else {
-          content = String(args.content ?? '')
-        }
-
-        const targetPath = resolveTargetPath(
-          deps,
-          title,
-          typeof args.path === 'string' ? args.path : undefined,
-          args.overwrite === true,
-        )
-        const bytes = await createDocxBytes({ format, content: content as string })
-        await atomicWriteFile(targetPath, Buffer.from(bytes))
-        return { path: targetPath, bytes: bytes.byteLength }
-      },
-    },
+    // headless generation is opt-in: when background is off (the default),
+    // clients only see the visible document session
+    ...(deps.background === false ? [] : [createHeadlessDocxTool(deps)]),
     {
       name: 'read_docx',
       description: 'Read a Word .docx file and return its visible text (one paragraph per line).',
