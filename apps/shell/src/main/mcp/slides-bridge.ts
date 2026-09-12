@@ -1,0 +1,129 @@
+import { existsSync } from 'node:fs'
+import { extname, isAbsolute } from 'node:path'
+import { webContents } from 'electron'
+import { elementDurableId, slideDurableId, type SlideElement } from '@genoffice/pptx-engine'
+import { applySessionTxn, saveSessionDeckTo } from '../../../../slides/src/main/slides-main'
+import { sessions, type Session } from '../../../../slides/src/main/session-state'
+import type { SlidesControl, SlidesTxnRequest } from './tools/slides-tools'
+
+/**
+ * Shell-main half of the MCP → slides bridge.
+ *
+ * Unlike docs, a slides editing session lives in the main process (keyed by the
+ * tab's webContents id), so there is no renderer protocol here: the control
+ * opens a blank slides tab, waits for the session the renderer's boot pull
+ * creates (`slides:new-blank`), then drives it through the same functions the
+ * app's own `slides:apply-txn` and save pipeline use. Every transaction lands
+ * in the session's undo history and journal, and the tab re-renders live.
+ */
+
+const READY_TIMEOUT_MS = 20_000
+const EMU_PER_PX_96 = 9525
+
+/** the session a tab's renderer creates on boot; the renderer applies the blank deck right after */
+async function waitSession(wcId: number): Promise<Session> {
+  const deadline = Date.now() + READY_TIMEOUT_MS
+  for (;;) {
+    const session = sessions.get(wcId)
+    if (session) return session
+    const wc = webContents.fromId(wcId)
+    if (!wc || wc.isDestroyed()) {
+      throw new Error('the presentation tab was closed before it became ready')
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`the presentation did not become ready within ${READY_TIMEOUT_MS}ms`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+}
+
+function requireSession(wcId: number): Session {
+  const session = sessions.get(wcId)
+  if (!session) {
+    throw new Error('the deck session is gone — its tab was closed; call create_deck again')
+  }
+  return session
+}
+
+/** compact model readout for the agent: ids, geometry (EMU) and text per element */
+function elementInfo(el: SlideElement): Record<string, unknown> {
+  const t = el.transform?.offset ?? { x: 0, y: 0, cx: 0, cy: 0 }
+  const info: Record<string, unknown> = {
+    id: elementDurableId(el) ?? el.id,
+    type: el.type,
+    x: t.x,
+    y: t.y,
+    w: t.cx,
+    h: t.cy,
+  }
+  if (el.type === 'text' || el.type === 'shape') {
+    const paragraphs = el.text?.paragraphs ?? []
+    if (paragraphs.length) {
+      info.text = paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join('\n')
+    }
+  } else if (el.type === 'table') {
+    info.text = el.rows
+      .map((row) =>
+        row
+          .map((cell) =>
+            (cell.text?.paragraphs ?? []).map((p) => p.runs.map((r) => r.text).join('')).join(''),
+          )
+          .join(' | '),
+      )
+      .join('\n')
+  } else if (el.type === 'group') {
+    info.children = el.children.map(elementInfo)
+  }
+  return info
+}
+
+function readDeckModel(session: Session): Record<string, unknown> {
+  const deck = session.opened.deck
+  return {
+    emuPerPx: EMU_PER_PX_96,
+    slideSize: {
+      widthPx: Math.round(deck.size.cx / EMU_PER_PX_96),
+      heightPx: Math.round(deck.size.cy / EMU_PER_PX_96),
+    },
+    slides: deck.slides.map((slide, index) => ({
+      index,
+      id: slideDurableId(slide),
+      elements: slide.elements.map(elementInfo),
+    })),
+  }
+}
+
+export interface SlidesBridgeDeps {
+  /** open a fresh blank slides tab; returns its webContents id */
+  openBlankTab: () => number
+}
+
+export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
+  return {
+    openBlankTab: async () => {
+      const wcId = await deps.openBlankTab()
+      await waitSession(wcId)
+      return wcId
+    },
+    runTxn: async (wcId: number, req: SlidesTxnRequest) => {
+      const session = requireSession(wcId)
+      const result = applySessionTxn(session, req as Parameters<typeof applySessionTxn>[1])
+      if (!result) throw new Error('the deck session is gone — call create_deck again')
+      return result
+    },
+    readDeck: async (wcId: number) => readDeckModel(requireSession(wcId)),
+    saveDeck: async (wcId: number, filePath: string, overwrite: boolean) => {
+      if (!isAbsolute(filePath)) throw new Error('path must be absolute')
+      const ext = extname(filePath).toLowerCase()
+      const targetPath =
+        ext === '' ? `${filePath}.pptx` : ext === '.pptx' ? filePath : null
+      if (!targetPath) throw new Error('path must point to a .pptx file')
+      if (existsSync(targetPath) && !overwrite) {
+        throw new Error(`file already exists: ${targetPath} (pass overwrite:true to replace it)`)
+      }
+      const session = requireSession(wcId)
+      await saveSessionDeckTo(session, targetPath)
+      return { path: targetPath }
+    },
+  }
+}

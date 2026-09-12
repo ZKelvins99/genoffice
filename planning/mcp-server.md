@@ -45,7 +45,8 @@ transport with the bundled script:
 
 Tools exposed in phase 1: `create_docx` (markdown or `SaveBlock[]` → a file on
 disk), `read_docx` (visible text), `open_in_genoffice` (focus the file in a
-tab), `get_app_info`.
+tab), `get_app_info`. Phase 1.5 adds the visible docs session; phase 2 (M1)
+adds Slides — `create_pptx` plus the visible deck session below.
 
 ## Phase 1.5: visible editing (external agent drives the UI)
 
@@ -84,6 +85,38 @@ These tools are only registered when the shell wired a `DocsControl`; headless
 and unit runs keep the file-only surface. Covered by
 `apps/shell/tests/mcp/document-tools.test.ts` (routing) and
 `e2e/mcp-visible-doc.spec.ts` (real app: visible tab → edits → saved docx).
+
+## Phase 2, milestone 1: Slides (pptx)
+
+Both paths reuse the slides main process — no renderer bridge needed, because a
+slides editing session already lives in main (`Session` keyed by the tab's
+webContents id, `apps/slides/src/main/session-state.ts`).
+
+**Headless.** `create_pptx` maps an outline to two op batches (the executor
+plans each transaction against pre-transaction state, so pages are created first
+and filled second) and runs them over `createBlankPptx()` via the canonical ops
+executor (`runTxn`), then streams the deck to disk with `savePptxToFile`.
+Registered behind the same `background` switch as `create_docx`.
+
+**Visible deck session** — `apps/shell/src/main/mcp/slides-bridge.ts` +
+`tools/slides-tools.ts`:
+
+| Tool              | Input                                              | Effect                                                                    |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `create_deck`     | `{}`                                               | opens a new blank slides tab, waits for the renderer's session            |
+| `apply_slide_ops` | `{ ops, isolation?, dryRun? }` (≤50, EMU geometry) | applies one transaction via `applySessionTxn` — the exact `slides:apply-txn` code path (history, journal, autofit) |
+| `read_deck`       | `{}`                                               | element inventory of every slide (durable ids, text, EMU geometry)        |
+| `save_deck`       | `{ path, overwrite? }`                             | writes via `saveSessionDeckTo` (recents, tab title, dirty reset), ends the session |
+
+`applySessionTxn` is extracted from the `slides:apply-txn` IPC handler
+(`apps/slides/src/main/slides-main.ts`) so the app's AI surface and the MCP
+tools share one implementation. Session lifecycle matches docs: one session at
+a time, `save_deck` ends it, further edits ask for `create_deck`.
+
+Covered by `apps/shell/tests/mcp/slides-tools.test.ts` (headless + session
+routing) and `e2e/mcp-visible-deck.spec.ts` (real app: visible slides tab →
+ops → saved pptx unpacked and verified). Execution tracked in
+[mcp-phase2-plan.md](./mcp-phase2-plan.md) (M2 = Sheets).
 
 ## Goal
 

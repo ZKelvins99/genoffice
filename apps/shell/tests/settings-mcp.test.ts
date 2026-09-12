@@ -45,6 +45,7 @@ async function renderModal(
     background?: boolean
     logging?: boolean
     url: string | null
+    capabilities?: string[]
   },
   logLines?: string[],
 ): Promise<void> {
@@ -136,7 +137,7 @@ describe('MCP settings pane', () => {
     expect(copyButtons[0]!.textContent).toBe('Copied')
   })
 
-  it('shows the capabilities split and a stopped status when disabled', async () => {
+  it('shows the capability rows and a stopped status when disabled', async () => {
     await renderModal({
       running: false,
       enabled: false,
@@ -147,9 +148,25 @@ describe('MCP settings pane', () => {
     expect(host.querySelector('.set-status-dot.running')).toBeNull()
     expect(host.textContent).toContain('Not running')
 
-    // documents are live; the rest of the suite is announced as upcoming
+    // documents are live; slides/sheets follow the build's capabilities and the
+    // remaining families stay announced as upcoming
     expect(host.textContent).toContain('Docs (Word)')
-    expect(host.textContent).toContain('Sheets · Slides · PDF')
+    expect(host.textContent).not.toContain('Slides (PowerPoint)')
+    expect(host.textContent).toContain('PDF')
+    expect(host.textContent).toContain('Coming soon')
+  })
+
+  it('lists slides and sheets capability rows when the build exposes them', async () => {
+    await renderModal({
+      running: false,
+      enabled: false,
+      port: 3093,
+      url: null,
+      capabilities: ['docs', 'slides', 'sheets'],
+    })
+    expect(host.textContent).toContain('Slides (PowerPoint)')
+    expect(host.textContent).toContain('Sheets (Excel)')
+    expect(host.textContent).toContain('Docs (Word)')
     expect(host.textContent).toContain('Coming soon')
   })
 

@@ -26,6 +26,8 @@ export interface DocToolDeps {
   openInTab?: (filePath: string) => Promise<void> | void
   /** visible-editor control for the MCP-driven document session (optional in tests) */
   docs?: DocsControl
+  /** extra formats other tool families can generate (reported by get_app_info) */
+  extraFormats?: string[]
 }
 
 /** editor commands the docs renderer bridge understands (see docs shared/ipc.ts) */
@@ -69,26 +71,46 @@ export function uniquePathIn(dir: string, fileName: string): string {
   return candidate
 }
 
+/**
+ * Shared output-path policy for every generating tool: sanitize the title into a
+ * file base name, land in the default save folder when no path is given, require
+ * absolute paths otherwise, append the extension when missing, and refuse to
+ * clobber an existing file unless overwrite is set.
+ */
+export function resolveOutputPath(opts: {
+  defaultSaveDir: () => string
+  ext: string
+  title: string
+  requestedPath?: string
+  overwrite?: boolean
+}): string {
+  const ext = opts.ext.startsWith('.') ? opts.ext : `.${opts.ext}`
+  const fileName = `${sanitizeFileBase(opts.title)}${ext}`
+  if (!opts.requestedPath) return uniquePathIn(opts.defaultSaveDir(), fileName)
+
+  if (!isAbsolute(opts.requestedPath)) {
+    throw new Error('path must be absolute')
+  }
+  const finalPath = extname(opts.requestedPath).toLowerCase() === ext ? opts.requestedPath : `${opts.requestedPath}${ext}`
+  if (existsSync(finalPath) && !opts.overwrite) {
+    throw new Error(`file already exists: ${finalPath} (pass overwrite:true to replace it)`)
+  }
+  return finalPath
+}
+
 export function resolveTargetPath(
   deps: DocToolDeps,
   title: string,
   requestedPath?: string,
   overwrite = false,
 ): string {
-  const fileName = `${sanitizeFileBase(title)}${DOCX_EXT}`
-  if (!requestedPath) return uniquePathIn(deps.defaultSaveDir(), fileName)
-
-  if (!isAbsolute(requestedPath)) {
-    throw new Error('path must be absolute')
-  }
-  const finalPath =
-    extname(requestedPath).toLowerCase() === DOCX_EXT
-      ? requestedPath
-      : `${requestedPath}${DOCX_EXT}`
-  if (existsSync(finalPath) && !overwrite) {
-    throw new Error(`file already exists: ${finalPath} (pass overwrite:true to replace it)`)
-  }
-  return finalPath
+  return resolveOutputPath({
+    defaultSaveDir: deps.defaultSaveDir,
+    ext: DOCX_EXT,
+    title,
+    requestedPath,
+    overwrite,
+  })
 }
 
 /** the phase-1 headless tool: markdown/blocks -> docx bytes written straight to disk */
@@ -199,7 +221,7 @@ export function createDocumentTools(deps: DocToolDeps): McpToolDefinition[] {
         name: 'GenOffice',
         version: deps.version,
         defaultSaveDir: deps.defaultSaveDir(),
-        formats: ['docx'],
+        formats: ['docx', ...(deps.extraFormats ?? [])],
       }),
     },
     ...createVisibleTools(deps),

@@ -205,6 +205,7 @@ const homeApi: HomeApi = {
       background?: unknown
       logging?: unknown
       url?: unknown
+      capabilities?: unknown
       error?: unknown
     } | null
     return {
@@ -214,6 +215,9 @@ const homeApi: HomeApi = {
       background: r?.background === true,
       logging: r?.logging === true,
       url: typeof r?.url === 'string' ? r.url : null,
+      capabilities: Array.isArray(r?.capabilities)
+        ? r.capabilities.filter((c): c is string => typeof c === 'string')
+        : ['docs'],
       ...(typeof r?.error === 'string' ? { error: r.error } : {}),
     }
   },
@@ -231,6 +235,7 @@ const homeApi: HomeApi = {
       background?: unknown
       logging?: unknown
       url?: unknown
+      capabilities?: unknown
       error?: unknown
     } | null
     return {
@@ -240,6 +245,9 @@ const homeApi: HomeApi = {
       background: r?.background === true,
       logging: r?.logging === true,
       url: typeof r?.url === 'string' ? r.url : null,
+      capabilities: Array.isArray(r?.capabilities)
+        ? r.capabilities.filter((c): c is string => typeof c === 'string')
+        : ['docs'],
       ...(typeof r?.error === 'string' ? { error: r.error } : {}),
     }
   },

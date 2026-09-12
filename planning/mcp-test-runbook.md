@@ -1,9 +1,10 @@
 # MCP 全功能测试流程（命令行直测）
 
 Status: 测试手册。不接任何智能体，全部用 curl / Node 脚本直接打 `http://127.0.0.1:3093/mcp`，
-覆盖当前全部 MCP 功能：可见文档会话、后台生成、读取/打开、错误路径、日志、旧版 SSE 与 stdio 桥。
+覆盖当前全部 MCP 功能：可见文档会话、演示(PPT)会话、后台生成、读取/打开、错误路径、日志、
+旧版 SSE 与 stdio 桥。
 
-适用版本：带"可见编辑会话 + 后台生成开关 + 日志"的构建（2026-09 之后）。若工具列表与本文不符，
+适用版本：带"可见编辑会话 + 演示会话 + 后台生成开关 + 日志"的构建（2026-09 之后）。若工具列表与本文不符，
 先重新构建：`npm run build -w @genoffice/shell && npm run build -w @genoffice/docs`，重启 app。
 
 ---
@@ -131,18 +132,19 @@ curl -s http://127.0.0.1:${MCP_PORT:-3093}/health
 node "$TEMP/mcp-probe.mjs" tools
 ```
 
-**期望（后台生成 = 关，默认）**，9 个工具：
+**期望（后台生成 = 关，默认）**，13 个工具：
 
 ```
-apply_ops, create_document, get_app_info, insert_content, open_in_genoffice,
-read_docx, read_document, replace_blocks, save_document
+apply_ops, apply_slide_ops, create_deck, create_document, get_app_info,
+insert_content, open_in_genoffice, read_deck, read_docx, read_document,
+replace_blocks, save_deck, save_document
 ```
 
-**不应出现 `create_docx`。**
+**不应出现 `create_docx` 和 `create_pptx`。**
 
 然后到 **设置 → MCP 设置 → 后台生成** 打开开关（服务会自动重启），再跑一次：
 
-**期望（后台生成 = 开）**，10 个工具：上面 9 个 + `create_docx`。
+**期望（后台生成 = 开）**，15 个工具：上面 13 个 + `create_docx` + `create_pptx`。
 
 测完可以把开关拨回默认（关），不影响后续章节。
 
@@ -317,7 +319,64 @@ curl -s -o /dev/null -w 'reuse   -> %{http_code}\n' -X POST "http://127.0.0.1:${
 
 - **改端口**：设置里把端口改成 `3094` → `curl -s http://127.0.0.1:3094/health` 应为 ok，3093 失效；
   连接信息区的三个 URL 同步变为 3094。测完改回。
-- **后台生成开关即时生效**：开→`tools` 多出 `create_docx`；关→消失（对应旧会话已失效，见 §9 的 404 行为）。
+- **后台生成开关即时生效**：开→`tools` 多出 `create_docx`、`create_pptx`；关→消失（对应旧会话已失效，见 §9 的 404 行为）。
+- **能力行**：设置 → MCP 设置 → 可用能力 应列出"文档 (Word)"和"演示 (PowerPoint)"，随后是"PDF / 即将支持"。
+
+## 11. 演示（PPT，两个路径）
+
+### 11.1 后台生成 `create_pptx`（需要 §2 中把"后台生成"打开）
+
+```bash
+# 11.1.1 Markdown 大纲 → pptx：`#` 开新页,`-` 项目符号,`1.` 编号,`##` 加粗行
+node "$TEMP/mcp-probe.mjs" call create_pptx "{\"title\":\"后台演示\",\"outline\":\"# 开场\\n- 第一点\\n- 第二点\\n\\n# 结论\\n## 加粗小结\\n1. 编号项\\n\",\"path\":\"$OUT/bg.pptx\",\"overwrite\":true}"
+
+# 11.1.2 JSON 大纲
+node "$TEMP/mcp-probe.mjs" call create_pptx "{\"title\":\"JsonDeck\",\"format\":\"json\",\"outline\":\"{\\\"slides\\\":[{\\\"title\\\":\\\"JSON 页\\\",\\\"bullets\\\":[\\\"a\\\",{\\\"text\\\":\\\"二级\\\",\\\"level\\\":1}]}]}\",\"path\":\"$OUT/json.pptx\",\"overwrite\":true}"
+
+# 11.1.3 同名再写不带 overwrite → 必须被拒
+node "$TEMP/mcp-probe.mjs" expect-error create_pptx "{\"title\":\"后台演示\",\"outline\":\"# A\",\"path\":\"$OUT/bg.pptx\"}"
+```
+
+**期望**：11.1.1 返回 `{"path":...,"slides":2,"bytes":>0}`，11.1.2 返回 `"slides":1`，
+**app 不出现新标签页**；11.1.3 报错含 `already exists`。
+用 PowerPoint/WPS 打开 `bg.pptx`：两页，每页有标题与项目符号/编号，版式正常。
+
+### 11.2 可见演示会话（默认可用，无需开"后台生成"）
+
+```bash
+# 11.2.1 打开一个空白演示标签页 —— app 应立刻出现一个新标签
+node "$TEMP/mcp-probe.mjs" call create_deck '{}'
+
+# 11.2.2 建第 1 页内容 —— 幻灯片上应实时出现文本框
+# offset 单位为 EMU（1 px = 9525 EMU）
+node "$TEMP/mcp-probe.mjs" call apply_slide_ops '{"ops":[{"op":"addElement","target":{"slide":0},"kind":"textbox","offset":{"x":1143000,"y":685800,"cx":7315200,"cy":1127760},"paragraphs":[{"runs":[{"text":"MCP 标题","bold":true,"fontSize":36}],"align":"left"}]},{"op":"addElement","target":{"slide":0},"kind":"textbox","offset":{"x":1143000,"y":2057400,"cx":7315200,"cy":3657600},"paragraphs":[{"runs":[{"text":"第一点","fontSize":20}],"bullet":{"type":"char","char":"•"},"marL":342900,"indent":-342900},{"runs":[{"text":"第二点","fontSize":20}],"bullet":{"type":"char","char":"•"},"marL":342900,"indent":-342900}]}]}'
+
+# 11.2.3 读回元素清单（拿到 id/几何，供后续 op 定位）
+node "$TEMP/mcp-probe.mjs" call read_deck '{}'
+
+# 11.2.4 dryRun 只出计划不改内容；再读一次确认没有变化
+node "$TEMP/mcp-probe.mjs" call apply_slide_ops '{"ops":[{"op":"deleteSlide","target":{"slide":0}}],"dryRun":true}'
+node "$TEMP/mcp-probe.mjs" call read_deck '{}'
+
+# 11.2.5 非法 op → 整批原子拒绝,错误带 usage 提示
+node "$TEMP/mcp-probe.mjs" expect-error apply_slide_ops '{"ops":[{"op":"NoSuchOp"}]}'
+
+# 11.2.6 输出到指定位置（会话结束）
+node "$TEMP/mcp-probe.mjs" call save_deck "{\"path\":\"$OUT/visible.pptx\",\"overwrite\":true}"
+
+# 11.2.7 会话已结束: 再编辑应报错
+node "$TEMP/mcp-probe.mjs" expect-error read_deck '{}'
+```
+
+**期望**：
+
+- 11.2.1 返回 `{"ok":true,"deckId":<数字>,"message":...}`，app 出现演示标签页
+- 11.2.2 返回 `"applied": true` 和 `created` 元素 id；幻灯片**实时**出现标题与两个项目符号
+- 11.2.3 返回 `{"emuPerPx":9525,...,"slides":[...]}`，元素文本含 "MCP 标题"
+- 11.2.4 dryRun 返回 `plan`；第二次 `read_deck` 仍是 1 页
+- 11.2.5 报错含 `unknown op`
+- 11.2.6 返回 `{"path":"...visible.pptx"}`，文件存在；保存后标签页标题变为 `visible.pptx`
+- 11.2.7 报错文案含 `create_deck`
 
 ---
 
@@ -326,7 +385,7 @@ curl -s -o /dev/null -w 'reuse   -> %{http_code}\n' -X POST "http://127.0.0.1:${
 | #   | 项目           | 通过条件                                                                                     |
 | --- | -------------- | -------------------------------------------------------------------------------------------- |
 | 1   | 健康检查       | `/health` 返回 ok + 正确端口                                                                 |
-| 2   | 工具列表       | 默认 9 个无 `create_docx`；后台开 10 个                                                      |
+| 2   | 工具列表       | 默认 13 个无 `create_docx`/`create_pptx`；后台开 15 个                                       |
 | 3   | 可见会话       | 建空档→写内容→改格式→读回→存盘，界面全程同步、无对话框；保存后文件存在；会话结束后再编辑报错 |
 | 4   | 后台生成       | markdown/blocks 直接落盘、无新标签页；覆盖保护生效                                           |
 | 5   | 读取/打开      | `read_docx` 文本正确（表格除外，已知边界）；`open_in_genoffice` 聚焦标签页                   |
@@ -334,6 +393,7 @@ curl -s -o /dev/null -w 'reuse   -> %{http_code}\n' -X POST "http://127.0.0.1:${
 | 7   | 日志           | 开关控制写入；含 listening/session/tool ok 行；清除有效                                      |
 | 8   | SSE + stdio 桥 | SSE 握手回包；桥转发 tools/list 成功                                                         |
 | 9   | 会话生命周期   | DELETE 后旧 session 404                                                                      |
-| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步                                                 |
+| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步；能力行含文档+演示                              |
+| 11  | 演示 (PPT)     | 后台大纲落盘（PPT/WPS 可开）；可见会话建页→实时渲染→读回→存盘→结束后报错                     |
 
 全部通过后清理：关闭测试产生的标签页、删除 `$OUT` 临时目录、删除 `%TEMP%\mcp-probe.mjs`。

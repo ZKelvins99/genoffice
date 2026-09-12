@@ -1061,6 +1061,7 @@ export function SettingsModal({
   const [mcpSaving, setMcpSaving] = useState(false)
   const [mcpBackground, setMcpBackground] = useState(false)
   const [mcpLogging, setMcpLogging] = useState(false)
+  const [mcpCaps, setMcpCaps] = useState<string[]>(['docs'])
   const [mcpLogs, setMcpLogs] = useState<string[]>([])
   const logViewRef = useRef<HTMLPreElement | null>(null)
   const [aiPrefs, setAiPrefs] = useState<AiPanelPrefs>(DEFAULT_AI_PANEL_PREFS)
@@ -1093,6 +1094,7 @@ export function SettingsModal({
         setMcpPort(String(s.port))
         setMcpBackground(s.background)
         setMcpLogging(s.logging)
+        setMcpCaps(s.capabilities ?? ['docs'])
         setMcpError(s.error ?? '')
       })
       .catch(() => {})
@@ -1143,6 +1145,7 @@ export function SettingsModal({
       setMcpPort(String(s.port))
       setMcpBackground(s.background)
       setMcpLogging(s.logging)
+      setMcpCaps(s.capabilities ?? ['docs'])
       setMcpError(s.error ?? '')
     })
     void window.aiOffice.getAiPanelPrefs?.().then((prefs) => {
@@ -1560,7 +1563,17 @@ export function SettingsModal({
                   </div>
                 )}
                 <h4 className="set-group-title">{t('setMcpCap')}</h4>
-                <Field label={t('setMcpCapDocs')} value={t('setMcpCapDocsDesc')} />
+                {(
+                  [
+                    ['docs', 'setMcpCapDocs', 'setMcpCapDocsDesc'],
+                    ['slides', 'setMcpCapSlides', 'setMcpCapSlidesDesc'],
+                    ['sheets', 'setMcpCapSheets', 'setMcpCapSheetsDesc'],
+                  ] as Array<[string, StringKey, StringKey]>
+                )
+                  .filter(([id]) => mcpCaps.includes(id))
+                  .map(([, labelKey, descKey]) => (
+                    <Field key={labelKey} label={t(labelKey)} value={t(descKey)} />
+                  ))}
                 <Field label={t('setMcpCapPlanned')} value={t('setMcpCapSoon')} />
               </>
             )}

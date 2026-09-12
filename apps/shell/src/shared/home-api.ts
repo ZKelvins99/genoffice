@@ -55,6 +55,8 @@ export interface McpStatus {
   logging: boolean
   /** base URL when running, else null */
   url: string | null
+  /** capability families the running build exposes, e.g. ['docs', 'slides'] */
+  capabilities: string[]
   /** present when the last start attempt failed (e.g. port in use) */
   error?: string
 }

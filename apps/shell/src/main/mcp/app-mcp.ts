@@ -1,6 +1,7 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
 import { McpLogger } from './mcp-logger'
 import { createDocumentTools, type DocsControl } from './tools/document-tools'
+import { createSlidesTools, type SlidesControl } from './tools/slides-tools'
 
 /**
  * Main-process wiring for the MCP server.
@@ -20,6 +21,8 @@ export interface McpRuntimeDeps {
   openPath: (filePath: string) => boolean
   /** drive a visible docs editor (live document session); absent in headless runs */
   docsControl?: DocsControl
+  /** drive a visible slides deck (main-process session); absent in headless runs */
+  slidesControl?: SlidesControl
   /** where the MCP log file lives (userData); logging is unavailable without it */
   logFilePath?: string
 }
@@ -40,6 +43,8 @@ export interface McpStatus {
   background: boolean
   logging: boolean
   url: string | null
+  /** capability families the current build exposes (settings pane rows) */
+  capabilities: string[]
 }
 
 let deps: McpRuntimeDeps | null = null
@@ -84,20 +89,30 @@ export function revealMcpLogFile(): void {
 
 function buildTools(): McpToolDefinition[] {
   if (!deps) throw new Error('MCP runtime not configured')
-  return createDocumentTools({
-    version: deps.version,
-    defaultSaveDir: deps.defaultSaveDir,
-    // headless create_docx is opt-in: off by default so the default surface is
-    // the visible document session
-    background: currentSettings.background,
-    // open_in_genoffice reports ok only when the file routed to a tab
-    openInTab: (filePath) => {
-      if (!deps) return
-      const opened = deps.openPath(filePath)
-      if (!opened) throw new Error(`could not open ${filePath} in GenOffice`)
-    },
-    docs: deps.docsControl,
-  })
+  // get_app_info advertises what the registered tool families can generate
+  const extraFormats = deps.slidesControl ? ['pptx'] : []
+  return [
+    ...createDocumentTools({
+      version: deps.version,
+      defaultSaveDir: deps.defaultSaveDir,
+      // headless create_docx is opt-in: off by default so the default surface is
+      // the visible document session
+      background: currentSettings.background,
+      // open_in_genoffice reports ok only when the file routed to a tab
+      openInTab: (filePath) => {
+        if (!deps) return
+        const opened = deps.openPath(filePath)
+        if (!opened) throw new Error(`could not open ${filePath} in GenOffice`)
+      },
+      docs: deps.docsControl,
+      extraFormats,
+    }),
+    ...createSlidesTools({
+      defaultSaveDir: deps.defaultSaveDir,
+      background: currentSettings.background,
+      slides: deps.slidesControl,
+    }),
+  ]
 }
 
 function ensureService(): McpServerService {
@@ -165,6 +180,7 @@ export function mcpStatus(): McpStatus {
     background: currentSettings.background,
     logging: currentSettings.logging,
     url: running ? service!.getUrl() : null,
+    capabilities: ['docs', ...(deps?.slidesControl ? ['slides'] : [])],
   }
 }
 
