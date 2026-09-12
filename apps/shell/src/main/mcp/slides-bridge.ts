@@ -3,7 +3,7 @@ import { extname, isAbsolute } from 'node:path'
 import { webContents } from 'electron'
 import { elementDurableId, slideDurableId, type SlideElement } from '@genoffice/pptx-engine'
 import { applySessionTxn, saveSessionDeckTo } from '../../../../slides/src/main/slides-main'
-import { sessions, type Session } from '../../../../slides/src/main/session-state'
+import { attachedIds, sessions, type Session } from '../../../../slides/src/main/session-state'
 import type { SlidesControl, SlidesTxnRequest } from './tools/slides-tools'
 
 /**
@@ -109,6 +109,21 @@ export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
       const session = requireSession(wcId)
       const result = applySessionTxn(session, req as Parameters<typeof applySessionTxn>[1])
       if (!result) throw new Error('the deck session is gone — call create_deck again')
+      // The ordinary `slides:apply-txn` path has an originating renderer that
+      // applies its own IPC return value; MCP runs in the main process, so the
+      // tab would never hear about the change — scheduleDeckBroadcast no-ops
+      // for single-window sessions. Push the fresh render to the tab ourselves
+      // (multi-window sessions already get the scheduled broadcast).
+      if (result.applied && result.slides) {
+        const ids = attachedIds(session)
+        if (ids.length < 2) {
+          const payload = {
+            slides: result.slides,
+            size: { cx: session.opened.deck.size.cx, cy: session.opened.deck.size.cy },
+          }
+          for (const id of ids) webContents.fromId(id)?.send('slides:deck-changed', payload)
+        }
+      }
       return result
     },
     readDeck: async (wcId: number) => readDeckModel(requireSession(wcId)),

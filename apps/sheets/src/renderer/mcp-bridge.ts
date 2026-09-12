@@ -1,5 +1,6 @@
+import { z } from 'zod'
 import type { McpCommandMessage } from '../shared/desktop-api'
-import type { WorkbookOperation } from '../domain/workbook-dsl'
+import { workbookOperationSchema, type WorkbookOperation } from '../domain/workbook-dsl'
 
 /**
  * Renderer half of the MCP → sheets-grid bridge.
@@ -61,6 +62,23 @@ export function installSheetsMcpBridge(handlers: McpSheetHandlers): () => void {
     off()
   }
 
+  /** First schema issue, with the offending op named so the client can fix it. */
+  function describeOpError(ops: unknown[], error: z.ZodError): string {
+    const issue = error.issues[0]
+    if (!issue) return 'invalid ops'
+    const index = typeof issue.path[0] === 'number' ? issue.path[0] : -1
+    const raw = index >= 0 ? ops[index] : undefined
+    const opName =
+      raw && typeof raw === 'object' && 'op' in raw
+        ? String((raw as { op: unknown }).op)
+        : 'unknown'
+    const field = issue.path.slice(1).join('.')
+    const hint = issue.path.includes('sheetId')
+      ? ' — call read_sheet first and use a sheetId from its output'
+      : ''
+    return `op #${index} (${opName}) is invalid${field ? ` (${field})` : ''}: ${issue.message}${hint}`
+  }
+
   async function runCommand(message: McpCommandMessage): Promise<void> {
     const reply = (ok: boolean, result?: unknown, error?: string): void => {
       api.reportMcpResult({
@@ -86,12 +104,20 @@ export function installSheetsMcpBridge(handlers: McpSheetHandlers): () => void {
           return
         }
         case 'apply_ops': {
-          const ops = Array.isArray(payload.ops) ? (payload.ops as WorkbookOperation[]) : []
+          const ops = Array.isArray(payload.ops) ? payload.ops : []
           if (ops.length === 0) {
             reply(false, undefined, 'ops must be a non-empty array')
             return
           }
-          reply(true, await handlers.applyOps(ops, payload.dryRun === true))
+          // Same validation the built-in AI path applies (ai/tools.ts): without
+          // it a missing sheetId surfaces later as a cryptic
+          // "Unknown sheet: undefined" from the planner instead of naming the op.
+          const parsed = z.array(workbookOperationSchema).safeParse(ops)
+          if (!parsed.success) {
+            reply(false, undefined, describeOpError(ops, parsed.error))
+            return
+          }
+          reply(true, await handlers.applyOps(parsed.data, payload.dryRun === true))
           return
         }
         case 'save_sheet': {

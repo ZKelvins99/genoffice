@@ -158,6 +158,26 @@ test.describe('MCP visible deck session', () => {
       await expect(editorTab).toHaveCount(1)
       const editorPage = await waitForPageWithUrl(app, 'slides/out')
 
+      // the visible tab really renders the deck (slide canvas mounted, blank
+      // slide painted). Snapshot every painted canvas: MCP edits live in the
+      // main-process session with no originating renderer, so the tab only
+      // hears about them via the bridge's deck-changed push — the canvases
+      // must actually change once the op below lands.
+      await expect(editorPage.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
+      const canvasFingerprints = () =>
+        editorPage.evaluate(() =>
+          Array.from(document.querySelectorAll('canvas'), (el) => {
+            try {
+              return (el as HTMLCanvasElement).toDataURL()
+            } catch {
+              return ''
+            }
+          }),
+        )
+      await editorPage.waitForTimeout(300) // let the initial blank paint settle
+      const beforePaint = await canvasFingerprints()
+      expect(beforePaint.length).toBeGreaterThan(0)
+
       // 2. build slide 1 with one atomic transaction
       const EMU = 9525
       const applied = await call('apply_slide_ops', {
@@ -174,13 +194,22 @@ test.describe('MCP visible deck session', () => {
       expect(applied.isError, applied.text).toBeFalsy()
       expect(applied.text).toContain('"applied": true')
 
+      // …and the canvas actually repaints with it (this is the "watch the deck
+      // build live" half of the feature; a swallowed broadcast leaves it blank)
+      await expect
+        .poll(
+          async () => {
+            const after = await canvasFingerprints()
+            return after.some((fp, i) => fp !== '' && fp !== beforePaint[i])
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true)
+
       // 3. read the deck back: the element exists with a durable id
       const read = await call('read_deck', {})
       expect(read.isError, read.text).toBeFalsy()
       expect(read.text).toContain('Deck From MCP')
-
-      // the visible tab really renders the deck (slide canvas mounted)
-      await expect(editorPage.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
 
       // 4. output to an explicit path (ends the session)
       const saved = await call('save_deck', { path: outFile })
