@@ -2,6 +2,7 @@
 
 Status 文档。基于 [mcp-phase2-feasibility.md](./mcp-phase2-feasibility.md) 的调研结论,
 拆成两个里程碑:**M1 = Slides(pptx)**,**M2 = Sheets(xlsx)**。
+专项验收测试手册:[mcp-slides-sheets-test.md](./mcp-slides-sheets-test.md)。
 
 **标记规则**:每完成一项,把 `- [ ]` 改成 `- [x]`,并在「进度记录」追加一行
 (日期 + 完成内容 + 提交哈希)。里程碑全部勾完时把该里程碑的 `Status` 改为 `已完成`。
