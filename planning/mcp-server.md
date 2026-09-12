@@ -110,7 +110,12 @@ Registered behind the same `background` switch as `create_docx`.
 
 `applySessionTxn` is extracted from the `slides:apply-txn` IPC handler
 (`apps/slides/src/main/slides-main.ts`) so the app's AI surface and the MCP
-tools share one implementation. Session lifecycle matches docs: one session at
+tools share one implementation. Because MCP runs in the main process with no
+originating renderer, a successful transaction is also pushed straight to the
+tab's webContents as `slides:deck-changed` (the shared `scheduleDeckBroadcast`
+no-ops for single-window sessions; the renderer applies the payload
+idempotently, and multi-window sessions keep getting the scheduled broadcast).
+Session lifecycle matches docs: one session at
 a time, `save_deck` ends it, further edits ask for `create_deck`.
 
 Covered by `apps/shell/tests/mcp/slides-tools.test.ts` (headless + session

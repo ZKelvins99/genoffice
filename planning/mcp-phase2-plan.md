@@ -38,8 +38,10 @@ Status: **已完成**（2026-09-12，提交 ef4b620）
 - [x] 编辑落库走主进程会话:`runTxn` + history + `scheduleDeckBroadcast`(对齐
       `slides:apply-txn` 行为),app 窗口实时可见
       —— `applySessionTxn` 从 `slides:apply-txn` IPC 处理器中提取,
-      IPC 与 MCP 桥共用同一实现(含 autofit 渲染后处理);单标签页场景
-      由桥直接推送 deck-changed 广播(broadcast 在单窗口时是 no-op)
+      IPC 与 MCP 桥共用同一实现(含 autofit 渲染后处理);单窗口时 broadcast 是
+      no-op(它假设发起方渲染器会自己应用 IPC 返回值,而 MCP 没有发起方),
+      所以桥在事务成功后主动向标签页 webContents 推送一次 deck-changed
+      (多窗口场景仍由 broadcast 负责;渲染器幂等应用)
 - [x] 会话结束语义与 docs 一致:`save_deck` 后会话关闭,再编辑报错提示先 `create_deck`
 
 ### M1.3 集成收尾
@@ -49,6 +51,8 @@ Status: **已完成**（2026-09-12，提交 ef4b620）
       —— `McpStatus.capabilities` 驱动能力行(docs/slides/sheets),PDF 保持
       "即将支持"行;新增 setMcpCapSlides/setMcpCapSheets 系列 × 20 语言
 - [x] e2e:`e2e/mcp-visible-deck.spec.ts` 跑真机——可见建 deck → 写内容 → 存盘 → 解包 pptx 验证
+      —— 含**画布重绘断言**:快照应用 op 前后所有 canvas 的像素指纹,断言可见标签页
+      实时上屏(曾在验收测试中暴露单窗口广播被吞的 P1,先红后绿修复,见进度记录)
 - [x] `planning/mcp-test-runbook.md` 增补 Slides 章节(§11,含后台/可见两路径)
 - [x] `planning/mcp-server.md` 工具清单更新;shell 全量测试 + typecheck + prettier 通过
 
@@ -124,13 +128,19 @@ shell 主进程已在用);公式保真走 Rust sidecar(`XlsxSidecarClient` + rec
 
 ## 进度记录
 
-| 日期       | 完成项                                                                                                              | 提交    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
-| 2026-09-12 | M1.1 create_pptx(大纲→两段式批事务)、M1.2 可见演示会话(applySessionTxn 共用)、M1.3 能力行动态化/20 语言/e2e/runbook | ef4b620 |
-| 2026-09-12 | M2.1 create_xlsx 纯值版、M2.3 可见表格会话(渲染器桥 + 显式路径保存)、M2.4 runbook/mcp-server/e2e                    | 9d6dcbd |
-| (待做)     | M2.2 公式保真(可选项,延后)                                                                                          | —       |
+| 日期       | 完成项                                                                                                                                                             | 提交    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| 2026-09-12 | M1.1 create_pptx(大纲→两段式批事务)、M1.2 可见演示会话(applySessionTxn 共用)、M1.3 能力行动态化/20 语言/e2e/runbook                                                | ef4b620 |
+| 2026-09-12 | M2.1 create_xlsx 纯值版、M2.3 可见表格会话(渲染器桥 + 显式路径保存)、M2.4 runbook/mcp-server/e2e                                                                   | 9d6dcbd |
+| 2026-09-12 | 验收修复(P1):MCP 单标签页 deck-changed 推送(画布实时渲染)+ e2e 画布重绘断言(先红后绿);(P2)apply_sheet_ops 按 DSL schema 校验,漏 sheetId 报 op 名 + read_sheet 提示 | 7c225cd |
+| (待做)     | M2.2 公式保真(可选项,延后)                                                                                                                                         | —       |
 
 验证记录(2026-09-12):shell 全量 312 测试通过;shell/sheets/slides typecheck 零错误;
 三个 MCP e2e(docx/deck/sheet)真机全过;prettier + check:theme-colors 全绿。
 仓库级全量测试中 10 个失败为存量平台问题(Windows 本机,与本次改动无关,
 已用 stash 对照验证;另有 1 个 csv-import 断言失败同属存量)。
+
+复核记录(2026-09-12,验收测试后):7 项核对 6 过 1 挂——Slides 可见会话画布不渲染
+(P1,数据/落盘路径全正常,仅可见性)。修复 7c225cd:桥主动推送 deck-changed,
+e2e 补画布重绘断言并对旧构建验证先红后绿;apply_sheet_ops 补 DSL 校验报错。
+复核后 shell 313 测试、sheets 2508 测试(3 个存量平台失败)通过,三个 MCP e2e 全绿。

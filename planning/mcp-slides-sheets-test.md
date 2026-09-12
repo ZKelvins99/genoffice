@@ -287,7 +287,9 @@ node "$TEMP/mcp-probe.mjs" expect-error apply_sheet_ops '{"ops":[{"op":"NoSuchOp
 - 3.4 返回 `{"cells":{"A1":{"value":"品名"},...,"B3":{"value":...,"formula":"=SUM(B2:B2)"}}}`
   —— B3 的 `value` 可能是 `null`（读取时引擎尚未算完）或 `12`，`formula` 必须在
 - 3.5 dryRun 返回 `"dryRun": true` 和 `cellChanges`；第二次 read 确认 **C1 没有被写入**
-- 3.6 报错（zod 校验信息或 unknown op）
+- 3.6 报错,校验信息点名违规 op(如 `op #0 (NoSuchOp) is invalid`);
+  漏 sheetId 的 op 会附「先 read_sheet 拿 sheetId」提示
+  (早期版本此处误报 `Unknown sheet: undefined`)
 
 ```bash
 # 3.7 输出到指定位置（会话结束；走与 Ctrl+S 相同的保存管线）
