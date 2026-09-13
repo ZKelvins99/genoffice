@@ -1,6 +1,7 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
 import { McpLogger } from './mcp-logger'
 import { createDocumentTools, documentDriver, type DocsControl } from './tools/document-tools'
+import { createPdfTools } from './tools/pdf-tools'
 import { createSlidesTools, slidesDriver, type SlidesControl } from './tools/slides-tools'
 import { createSheetsTools, sheetsDriver, type SheetsControl } from './tools/sheets-tools'
 import { createSessionHost, createSessionTools, type FamilyDriver } from './tools/session-tools'
@@ -145,6 +146,9 @@ function buildTools(): McpToolDefinition[] {
       },
       host,
     ),
+    // headless, session-free read access (read_pdf); registered whenever the
+    // pdf workspace is bundled in, which the shell always does
+    ...createPdfTools(),
   ]
 }
 

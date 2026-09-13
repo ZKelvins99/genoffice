@@ -132,21 +132,29 @@ curl -s http://127.0.0.1:${MCP_PORT:-3093}/health
 node "$TEMP/mcp-probe.mjs" tools
 ```
 
-**期望（后台生成 = 关，默认）**，13 个工具：
+**期望（后台生成 = 关，默认）**，14 个工具：
 
 ```
 apply_ops, apply_sheet_ops, apply_slide_ops, create_session, get_app_info,
 insert_content, open_in_genoffice, read_deck, read_docx, read_document,
-read_sheet, replace_blocks, save_session
+read_pdf, read_sheet, replace_blocks, save_session
 ```
 
 **不应出现 `create_docx`、`create_pptx`、`create_xlsx`。**
 
 然后到 **设置 → MCP 设置 → 后台生成** 打开开关（服务会自动重启），再跑一次：
 
-**期望（后台生成 = 开）**，16 个工具：上面 13 个 + `create_docx` + `create_pptx` + `create_xlsx`。
+**期望（后台生成 = 开）**，17 个工具：上面 14 个 + `create_docx` + `create_pptx` + `create_xlsx`。
 
 测完可以把开关拨回默认（关），不影响后续章节。
+
+顺手验证只读的 PDF 抽取（不需要 app 界面）：
+
+```bash
+node "$TEMP/mcp-probe.mjs" call read_pdf '{"path":"C:/绝对路径/某个文件.pdf"}'
+```
+
+**期望**：返回 `pageCount`、`info.title`（如有）与逐页 `text`；用 `{"pages":"1-2"}` 再试一次应只返回前两页。扫描件（无文本层）页面 `text` 为空且 `hasTextLayer:false`；损坏/加密文件报"could not open the PDF"。
 
 ## 3. 可见文档会话（核心功能）
 
@@ -440,19 +448,19 @@ node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
 
 ## 通过标准（核对清单）
 
-| #   | 项目           | 通过条件                                                                                     |
-| --- | -------------- | -------------------------------------------------------------------------------------------- |
-| 1   | 健康检查       | `/health` 返回 ok + 正确端口                                                                 |
-| 2   | 工具列表       | 默认 13 个无 `create_docx`/`create_pptx`/`create_xlsx`；后台开 16 个                         |
-| 3   | 可见会话       | 建空档→写内容→改格式→读回→存盘，界面全程同步、无对话框；保存后文件存在；会话结束后再编辑报错 |
-| 4   | 后台生成       | markdown/blocks 直接落盘、无新标签页；覆盖保护生效                                           |
-| 5   | 读取/打开      | `read_docx` 文本正确（表格除外，已知边界）；`open_in_genoffice` 聚焦标签页                   |
-| 6   | 错误路径       | 缺文件/相对路径/非法 ops/伪造 session(404)/未初始化(400) 全部按预期拒绝                      |
-| 7   | 日志           | 开关控制写入；含 listening/session/tool ok 行；清除有效                                      |
-| 8   | SSE + stdio 桥 | SSE 握手回包；桥转发 tools/list 成功                                                         |
-| 9   | 会话生命周期   | DELETE 后旧 session 404                                                                      |
-| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步；能力行含文档+演示+表格                         |
-| 11  | 演示 (PPT)     | 后台大纲落盘（PPT/WPS 可开）；可见会话建页→实时渲染→读回→存盘→结束后报错                     |
-| 12  | 表格 (xlsx)    | 后台纯值落盘（数值类型正确）；可见会话填值+公式→实时渲染→读回→存盘（公式保真）→结束后报错    |
+| #   | 项目           | 通过条件                                                                                                                                   |
+| --- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | 健康检查       | `/health` 返回 ok + 正确端口                                                                                                               |
+| 2   | 工具列表       | 默认 14 个无 `create_docx`/`create_pptx`/`create_xlsx`；后台开 17 个                                                                       |
+| 3   | 可见会话       | 建空档→写内容→改格式→读回→存盘，界面全程同步、无对话框；保存后文件存在；会话结束后再编辑报错                                               |
+| 4   | 后台生成       | markdown/blocks 直接落盘、无新标签页；覆盖保护生效                                                                                         |
+| 5   | 读取/打开      | `read_docx` 文本正确（表格除外，已知边界）；`read_pdf` 逐页文本/页数/标题正确，扫描页 `hasTextLayer:false`；`open_in_genoffice` 聚焦标签页 |
+| 6   | 错误路径       | 缺文件/相对路径/非法 ops/伪造 session(404)/未初始化(400) 全部按预期拒绝                                                                    |
+| 7   | 日志           | 开关控制写入；含 listening/session/tool ok 行；清除有效                                                                                    |
+| 8   | SSE + stdio 桥 | SSE 握手回包；桥转发 tools/list 成功                                                                                                       |
+| 9   | 会话生命周期   | DELETE 后旧 session 404                                                                                                                    |
+| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步；能力行含文档+演示+表格                                                                       |
+| 11  | 演示 (PPT)     | 后台大纲落盘（PPT/WPS 可开）；可见会话建页→实时渲染→读回→存盘→结束后报错                                                                   |
+| 12  | 表格 (xlsx)    | 后台纯值落盘（数值类型正确）；可见会话填值+公式→实时渲染→读回→存盘（公式保真）→结束后报错                                                  |
 
 全部通过后清理：关闭测试产生的标签页、删除 `$OUT` 临时目录、删除 `%TEMP%\mcp-probe.mjs`。

@@ -8,11 +8,17 @@
         "properties": {
           "family": {
             "type": "string",
-            "enum": ["docx", "pptx", "xlsx"],
+            "enum": [
+              "docx",
+              "pptx",
+              "xlsx"
+            ],
             "description": "which editor to open"
           }
         },
-        "required": ["family"],
+        "required": [
+          "family"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -34,7 +40,9 @@
             "type": "boolean"
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -52,7 +60,9 @@
             "description": "absolute path to a .docx file"
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -70,7 +80,9 @@
             "description": "absolute path to the file to open"
           }
         },
-        "required": ["path"],
+        "required": [
+          "path"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -106,7 +118,9 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["html"],
+        "required": [
+          "html"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -136,7 +150,11 @@
             "description": "restricted HTML fragment the range is replaced with"
           }
         },
-        "required": ["startBlockIndex", "endBlockIndex", "html"],
+        "required": [
+          "startBlockIndex",
+          "endBlockIndex",
+          "html"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -159,7 +177,9 @@
             "type": "boolean"
           }
         },
-        "required": ["ops"],
+        "required": [
+          "ops"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -205,14 +225,19 @@
           "isolation": {
             "description": "atomic (default) applies all-or-nothing; per_op applies independently",
             "type": "string",
-            "enum": ["atomic", "per_op"]
+            "enum": [
+              "atomic",
+              "per_op"
+            ]
           },
           "dryRun": {
             "description": "validate and plan the batch without changing the deck",
             "type": "boolean"
           }
         },
-        "required": ["ops"],
+        "required": [
+          "ops"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {
@@ -259,7 +284,33 @@
             "type": "boolean"
           }
         },
-        "required": ["ops"],
+        "required": [
+          "ops"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "read_pdf",
+      "description": "Read a PDF file: page count, metadata (title/author), and per-page text with page size. Text is extracted in content order, so complex multi-column layouts may scramble the reading order. Scanned pages have no text layer and come back with empty text and hasTextLayer:false. Large documents are capped; use `pages` for a bounded read.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "absolute path to a .pdf file"
+          },
+          "pages": {
+            "description": "1-based pages to read, e.g. \"3\" or \"1-5,8\"; default is the whole document",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
         "$schema": "http://json-schema.org/draft-07/schema#"
       },
       "execution": {

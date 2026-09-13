@@ -70,7 +70,8 @@ visible session was added:
 > `save_session { path, overwrite? }`, with a single active session at a time
 > (`apps/shell/src/main/mcp/tools/session-tools.ts`). Each family module now
 > exposes a `FamilyDriver` (open + save) instead of its own lifecycle tools, and
-> the default surface dropped from 17 tools to 13. The per-family content tools
+> the default surface dropped from 17 tools to 13 (later 14 with the read-only
+> `read_pdf`, see the PDF section below). The per-family content tools
 > (`insert_content`, `read_document`, `apply_ops`, …) are unchanged. Where this
 > document says `create_document` / `save_document` / `create_deck` /
 > `save_deck` / `create_sheet` / `save_sheet`, read the merged pair with the
@@ -83,11 +84,12 @@ visible session was added:
 > visible rather than silent, and `save_session` refuses a path whose extension
 > does not match the active family. Adding a family or format is a registry entry
 > plus a driver — nothing else in the MCP layer changes. The registry also records
-> editor capability MCP does not drive yet (the markdown / HTML / PDF editors, and
-> each editor's PDF export), which is where a future family or export tool plugs
-> in. Where the editor can do more than MCP exposes (e.g. Sheets Save-As offers
-> `.xlsm`/`.csv` but the explicit-path save bridge writes `.xlsx` only), the
-> `mcp` block lists the narrower truth.
+> editor capability MCP does not drive yet (the markdown / HTML editors, the
+> pdf _editor_, and each editor's PDF export), which is where a future family or
+> export tool plugs in. Where the editor can do more than MCP exposes (e.g.
+> Sheets Save-As offers `.xlsm`/`.csv` but the explicit-path save bridge writes
+> `.xlsx` only), the `mcp` block lists the narrower truth — the `pdf` family
+> carries `mcp.read` only until MCP drives its editor.
 
 | Tool             | Input                                      | Effect                                                         |
 | ---------------- | ------------------------------------------ | -------------------------------------------------------------- |
@@ -191,6 +193,32 @@ Ops address sheets by id (learn it from `read_sheet`), cells by A1. Covering
 tests: `apps/shell/tests/mcp/sheets-tools.test.ts` and
 `e2e/mcp-visible-sheet.spec.ts` (real app: visible tab → values + formula →
 saved xlsx with the formula intact).
+
+## PDF reading (read-only)
+
+The pdf app is a viewer/editor whose text engine already runs in the shell main
+process (`apps/pdf/src/main/text-edit.ts` loads the `@embedpdf/pdfium` WASM for
+text editing), so MCP gets PDF **reading** without any new dependency:
+`apps/pdf/src/main/read-text.ts` walks pdfium textpages over the shared
+`chainPdfium`/`withDocument` helpers, and `tools/pdf-tools.ts` exposes it as a
+headless, session-free tool — always registered, like `read_docx`. The registry
+records the family as `mcp: { read: 'pdf' }` (no generate/save) and the settings
+pane keeps the PDF row "coming soon" until the editor itself is driven.
+
+| Tool       | Input                       | Effect                                                                                                                                       |
+| ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read_pdf` | `{ path, pages?: "1-5,8" }` | page count, info-dictionary title/author, per-page size + text (content order, `\n` line breaks); scanned pages return `hasTextLayer: false` |
+
+Text extraction caps at 80k chars (`truncated: true` when the cap bit) so one
+huge PDF cannot flood the agent's context; `pages` bounds it further. Three
+embedpdf wasm quirks are load-bearing: `FPDFText_GetText` takes 4 args (the
+build drops `buffer_size` — it copies exactly `count` chars, NUL included, so
+the terminator is stripped client-side), `FPDF_GetMetaText` takes the tag as an
+ASCII BYTESTRING while the value comes back UTF-16LE with a byte length (NUL
+included), and encrypted/corrupt files surface as a clean "could not open the
+PDF" tool error. Covering tests: `apps/shell/tests/mcp/pdf-tools.test.ts`, the
+read_pdf step in `mcp-http-surface.test.ts`, and `e2e/mcp-read-pdf.spec.ts`
+(real app).
 
 ## Goal
 

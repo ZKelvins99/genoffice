@@ -9,6 +9,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { parseDocx } from '@genoffice/docx-engine'
 import { openPptx } from '@genoffice/pptx-engine'
 import JSZip from 'jszip'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
 import {
   applyMcpSettings,
   configureMcpRuntime,
@@ -42,6 +43,7 @@ const DEFAULT_NAMES = [
   'read_deck',
   'read_document',
   'read_docx',
+  'read_pdf',
   'read_sheet',
   'replace_blocks',
   'save_session',
@@ -362,6 +364,32 @@ describe('MCP surface over Streamable HTTP (/mcp)', () => {
       const refusedOpen = await call(client, 'open_in_genoffice', { path: notOpenable })
       expect(refusedOpen.isError).toBe(true)
       expect(refusedOpen.text).toMatch(/could not open/)
+
+      // ── 9. read_pdf: real pdfium extraction, session-free ────────────────
+      const pdfPath = join(workDir, 'handout.pdf')
+      const pdfDoc = await PDFDocument.create()
+      pdfDoc.setTitle('Handout')
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const pdfPage = pdfDoc.addPage([400, 300])
+      pdfPage.drawText('Read me through MCP', { x: 40, y: 200, size: 14, font })
+      pdfDoc.addPage([400, 300]) // scanned-page stand-in: no text layer
+      await writeFile(pdfPath, await pdfDoc.save())
+      const pdfRead = await call(client, 'read_pdf', { path: pdfPath })
+      expect(pdfRead.isError).toBe(false)
+      const pdfJson = pdfRead.json as {
+        pageCount: number
+        info: { title?: string }
+        pages: Array<{ page: number; text: string; hasTextLayer: boolean }>
+      }
+      expect(pdfJson.pageCount).toBe(2)
+      expect(pdfJson.info.title).toBe('Handout')
+      expect(pdfJson.pages[0]!.text).toContain('Read me through MCP')
+      expect(pdfJson.pages[1]!.hasTextLayer).toBe(false)
+      const pdfPaged = await call(client, 'read_pdf', { path: pdfPath, pages: '2' })
+      expect(pdfPaged.isError).toBe(false)
+      expect(
+        (pdfPaged.json as { pages: Array<{ page: number }> }).pages.map((p) => p.page),
+      ).toEqual([2])
     } finally {
       await client.close()
     }

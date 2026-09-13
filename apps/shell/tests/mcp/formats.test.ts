@@ -21,16 +21,24 @@ describe('format registry', () => {
     expect(formatFamily('pptx').editorOpen).toEqual(['pptx'])
   })
 
-  it('keeps the editor-only families (md/html/pdf) without an mcp block', () => {
-    for (const family of ['md', 'html', 'pdf'] as const) {
+  it('keeps the editor-only families (md/html) without an mcp block', () => {
+    for (const family of ['md', 'html'] as const) {
       expect(formatFamily(family).mcp).toBeUndefined()
     }
-    // only the three edit-in-place families carry an mcp block
+    // the three edit-in-place families carry full mcp blocks; pdf is read-only
     expect(FORMAT_FAMILIES.filter((f) => f.mcp).map((f) => f.family)).toEqual([
       'docx',
       'xlsx',
       'pptx',
+      'pdf',
     ])
+  })
+
+  it('exposes pdf as read-only until MCP drives the editor', () => {
+    const pdf = formatFamily('pdf')
+    expect(pdf.mcp).toEqual({ read: 'pdf' })
+    expect(pdf.mcp?.save).toBeUndefined()
+    expect(pdf.mcp?.generate).toBeUndefined()
   })
 
   it('records the editor export capabilities even where mcp cannot reach them', () => {
@@ -87,5 +95,7 @@ describe('capabilityReport', () => {
     expect(docx.mcp).toEqual({ generate: 'docx', save: ['docx'], read: 'docx' })
     // editor-only family carries no mcp key
     expect(report.find((r) => r.family === 'md')!.mcp).toBeUndefined()
+    // pdf is the read-only family
+    expect(report.find((r) => r.family === 'pdf')!.mcp).toEqual({ read: 'pdf' })
   })
 })

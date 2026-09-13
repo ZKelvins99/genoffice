@@ -27,8 +27,8 @@ export type EditorFamily = SessionFamily | 'md' | 'html' | 'pdf'
 export interface McpFormats {
   /** format the headless `create_*` tool writes, when exposed */
   generate?: string
-  /** extensions `save_session` accepts for this family */
-  save: readonly string[]
+  /** extensions `save_session` accepts for this family (session families only) */
+  save?: readonly string[]
   /** format the file reader tool understands, when exposed */
   read?: string
 }
@@ -102,6 +102,9 @@ export const FORMAT_FAMILIES: readonly FormatFamily[] = [
     editorSave: ['pdf'],
     // the PDF app converts on-device to the three editable formats
     editorExport: ['docx', 'xlsx', 'pptx'],
+    // read-only for now (headless text extraction): the settings pane keeps the
+    // family "coming soon" until MCP also drives the editor
+    mcp: { read: 'pdf' },
   },
 ]
 

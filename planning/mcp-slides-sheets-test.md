@@ -186,12 +186,12 @@ node "$TEMP/mcp-probe.mjs" tools
 curl -s http://127.0.0.1:${MCP_PORT:-3093}/health
 ```
 
-**期望**：health 返回 ok；工具 **17 个**：
+**期望**：health 返回 ok；工具 **14 个**：
 
 ```
 apply_ops, apply_sheet_ops, apply_slide_ops, create_session, get_app_info,
 insert_content, open_in_genoffice, read_deck, read_docx, read_document,
-read_sheet, replace_blocks, save_session
+read_pdf, read_sheet, replace_blocks, save_session
 ```
 
 **不应出现** `create_docx` / `create_pptx` / `create_xlsx`（这三个属于"后台生成"，默认关）。
