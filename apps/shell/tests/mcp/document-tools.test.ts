@@ -9,9 +9,11 @@ import { parseDocx } from '@genoffice/docx-engine'
 import { McpServerService } from '../../src/main/mcp/mcp-server'
 import {
   createDocumentTools,
+  documentDriver,
   resolveTargetPath,
   sanitizeFileBase,
 } from '../../src/main/mcp/tools/document-tools'
+import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
 
 /**
  * M3: the docx tool surface over a real MCP session. Files are written to a
@@ -42,13 +44,16 @@ beforeEach(async () => {
   const port = await freePort()
   service = new McpServerService({
     port,
-    tools: createDocumentTools({
-      version: '0.9.0-test',
-      defaultSaveDir: () => dir,
-      openInTab: (filePath) => {
-        opened.push(filePath)
+    tools: createDocumentTools(
+      {
+        version: '0.9.0-test',
+        defaultSaveDir: () => dir,
+        openInTab: (filePath) => {
+          opened.push(filePath)
+        },
       },
-    }),
+      createSessionHost(),
+    ),
   })
   await service.start()
   client = new Client({ name: 'm3-test', version: '0.0.0' })
@@ -209,11 +214,14 @@ describe('M3 docx tools', () => {
 
 describe('background generation gating', () => {
   it('hides create_docx when background is off, keeps the read/open/info tools', () => {
-    const names = createDocumentTools({
-      version: 'x',
-      defaultSaveDir: () => dir,
-      background: false,
-    }).map((t) => t.name)
+    const names = createDocumentTools(
+      {
+        version: 'x',
+        defaultSaveDir: () => dir,
+        background: false,
+      },
+      createSessionHost(),
+    ).map((t) => t.name)
     expect(names).not.toContain('create_docx')
     expect(names).toContain('read_docx')
     expect(names).toContain('open_in_genoffice')
@@ -222,10 +230,10 @@ describe('background generation gating', () => {
 
   it('exposes create_docx by default and when background is on', () => {
     const base = { version: 'x', defaultSaveDir: () => dir }
-    expect(createDocumentTools(base).map((t) => t.name)).toContain('create_docx')
-    expect(createDocumentTools({ ...base, background: true }).map((t) => t.name)).toContain(
-      'create_docx',
-    )
+    const withHost = (extra: Record<string, unknown> = {}) =>
+      createDocumentTools({ ...base, ...extra }, createSessionHost()).map((t) => t.name)
+    expect(withHost()).toContain('create_docx')
+    expect(withHost({ background: true })).toContain('create_docx')
   })
 })
 
@@ -283,11 +291,20 @@ describe('M6 visible-editing tools (docs control wired)', () => {
     })()
     service2 = new McpServerService({
       port,
-      tools: createDocumentTools({
-        version: '0.9.0-test',
-        defaultSaveDir: () => dir2,
-        docs: fake.control,
-      }),
+      tools: (() => {
+        const host = createSessionHost()
+        return [
+          ...createSessionTools([documentDriver(fake.control)], host),
+          ...createDocumentTools(
+            {
+              version: '0.9.0-test',
+              defaultSaveDir: () => dir2,
+              docs: fake.control,
+            },
+            host,
+          ),
+        ]
+      })(),
     })
     await service2.start()
     client2 = new Client({ name: 'm6-test', version: '0.0.0' })
@@ -313,29 +330,37 @@ describe('M6 visible-editing tools (docs control wired)', () => {
     const { tools } = await client2!.listTools()
     expect(tools.map((t) => t.name).sort()).toEqual([
       'apply_ops',
-      'create_document',
       'create_docx',
+      'create_session',
       'get_app_info',
       'insert_content',
       'open_in_genoffice',
       'read_document',
       'read_docx',
       'replace_blocks',
-      'save_document',
+      'save_session',
     ])
   })
 
-  it('create_document opens a blank tab and returns a document id', async () => {
-    const result = await client2!.callTool({ name: 'create_document', arguments: {} })
+  it('create_session opens a blank docx tab and returns a session id', async () => {
+    const result = await client2!.callTool({
+      name: 'create_session',
+      arguments: { family: 'docx' },
+    })
     expect(result.isError).toBeFalsy()
-    const payload = JSON.parse(textOf(result.content)) as { documentId: number; ok: boolean }
+    const payload = JSON.parse(textOf(result.content)) as {
+      sessionId: number
+      ok: boolean
+      family: string
+    }
     expect(payload.ok).toBe(true)
-    expect(payload.documentId).toBe(42)
+    expect(payload.family).toBe('docx')
+    expect(payload.sessionId).toBe(42)
     expect(fake.opens()).toBe(1)
   })
 
-  it('routes insert_content into the created tab', async () => {
-    await client2!.callTool({ name: 'create_document', arguments: {} })
+  it('routes insert_content into the created session tab', async () => {
+    await client2!.callTool({ name: 'create_session', arguments: { family: 'docx' } })
     const result = await client2!.callTool({
       name: 'insert_content',
       arguments: { html: '<h1>Title</h1>', afterBlockIndex: 0 },
@@ -349,7 +374,7 @@ describe('M6 visible-editing tools (docs control wired)', () => {
   })
 
   it('routes replace_blocks and apply_ops with their payloads', async () => {
-    await client2!.callTool({ name: 'create_document', arguments: {} })
+    await client2!.callTool({ name: 'create_session', arguments: { family: 'docx' } })
     await client2!.callTool({
       name: 'replace_blocks',
       arguments: { startBlockIndex: 0, endBlockIndex: 1, html: '<p>x</p>' },
@@ -366,11 +391,11 @@ describe('M6 visible-editing tools (docs control wired)', () => {
     })
   })
 
-  it('save_document forwards path + overwrite and ends the session', async () => {
-    await client2!.callTool({ name: 'create_document', arguments: {} })
+  it('save_session forwards path + overwrite and ends the session', async () => {
+    await client2!.callTool({ name: 'create_session', arguments: { family: 'docx' } })
     const target = join(dir2, 'out.docx')
     const saved = await client2!.callTool({
-      name: 'save_document',
+      name: 'save_session',
       arguments: { path: target, overwrite: true },
     })
     expect(saved.isError).toBeFalsy()
@@ -385,16 +410,22 @@ describe('M6 visible-editing tools (docs control wired)', () => {
       arguments: { html: '<p>late</p>' },
     })
     expect(after.isError).toBe(true)
-    expect(textOf(after.content)).toContain('create_document')
+    expect(textOf(after.content)).toContain('create_session')
   })
 
-  it('editing before create_document is refused', async () => {
+  it('editing before create_session is refused', async () => {
     const result = await client2!.callTool({
       name: 'insert_content',
       arguments: { html: '<p>nope</p>' },
     })
     expect(result.isError).toBe(true)
-    expect(textOf(result.content)).toContain('create_document')
+    expect(textOf(result.content)).toContain('create_session')
     expect(fake.calls).toEqual([])
+  })
+
+  it('rejects an unknown family value', async () => {
+    // only the docx driver is registered here, so the schema enum excludes xlsx
+    const bad = await client2!.callTool({ name: 'create_session', arguments: { family: 'xlsx' } })
+    expect(bad.isError).toBe(true)
   })
 })

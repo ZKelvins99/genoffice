@@ -11,8 +11,8 @@ import http, { createServer } from 'node:http'
  *
  * Pre-seeds the MCP settings, launches the shell, then drives the local MCP
  * server over Streamable HTTP exactly as an external agent would:
- * create_document (opens a visible tab) → insert_content → apply_ops (format)
- * → save_document (writes the file). Asserts both the on-disk docx and that a
+ * create_session family=docx (opens a visible tab) → insert_content → apply_ops (format)
+ * → save_session (writes the file). Asserts both the on-disk docx and that a
  * docs tab actually appeared in the shell UI.
  */
 
@@ -153,7 +153,7 @@ test.describe('MCP visible document session', () => {
       }
 
       // 1. open a visible blank document
-      const created = await call('create_document', {})
+      const created = await call('create_session', { family: 'docx' })
       expect(created.isError).toBeFalsy()
 
       // the shell UI shows a real docs tab (the visible half of the feature)
@@ -179,7 +179,7 @@ test.describe('MCP visible document session', () => {
       await expect(editorPage.locator('.ProseMirror')).toContainText('Quarterly Report')
 
       // 4. output to an explicit path
-      const saved = await call('save_document', { path: outFile })
+      const saved = await call('save_session', { path: outFile })
       expect(saved.isError, saved.text).toBeFalsy()
       expect(existsSync(outFile)).toBe(true)
 

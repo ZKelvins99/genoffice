@@ -10,8 +10,8 @@ import JSZip from 'jszip'
 /**
  * MCP visible grid session, end to end against the real built app.
  *
- * create_sheet (opens a visible sheets tab) → apply_sheet_ops (values +
- * formula, seen live by the user) → read_sheet → save_sheet (writes the file
+ * create_session family=xlsx (opens a visible sheets tab) → apply_sheet_ops (values +
+ * formula, seen live by the user) → read_sheet → save_session (writes the file
  * through the regular save pipeline with an explicit path). Asserts the
  * on-disk xlsx (values AND the formula) and that a sheets tab actually
  * appeared in the shell UI.
@@ -150,7 +150,7 @@ test.describe('MCP visible grid session', () => {
       }
 
       // 1. open a visible blank spreadsheet (session tools need no background flag)
-      const created = await call('create_sheet', {})
+      const created = await call('create_session', { family: 'xlsx' })
       expect(created.isError, created.text).toBeFalsy()
 
       // the shell UI shows a real sheets tab (the visible half of the feature)
@@ -187,7 +187,7 @@ test.describe('MCP visible grid session', () => {
       await expect(editorPage.locator('canvas').first()).toBeVisible({ timeout: 15_000 })
 
       // 4. output to an explicit path (ends the session)
-      const saved = await call('save_sheet', { path: outFile })
+      const saved = await call('save_session', { path: outFile })
       expect(saved.isError, saved.text).toBeFalsy()
       expect(existsSync(outFile)).toBe(true)
 

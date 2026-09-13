@@ -169,4 +169,47 @@ describe('MCP server core', () => {
     })
     await expect(second.start()).rejects.toMatchObject({ code: 'EADDRINUSE' })
   })
+
+  it('toolsFactory runs once per client session, giving each its own tool state', async () => {
+    const port = await freePort()
+    let builds = 0
+    // a stateful tool: each build gets a fresh counter closure
+    service = new McpServerService({
+      port,
+      toolsFactory: () => {
+        builds++
+        let count = 0
+        return [
+          {
+            name: 'count',
+            description: 'increments a session-local counter',
+            handler: () => ({ count: ++count }),
+          },
+        ]
+      },
+    })
+    await service.start()
+
+    const connect = async (): Promise<Client> => {
+      const c = new Client({ name: 'factory-test', version: '0.0.0' })
+      await c.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)))
+      return c
+    }
+    const text = (r: { content: unknown }): string =>
+      (r.content as Array<{ text?: string }>).map((c) => c.text ?? '').join('')
+
+    const a = await connect()
+    const b = await connect()
+    expect(builds).toBe(2) // one factory call per session
+
+    // each client's counter is independent: two calls on A reach 2, B starts at 1
+    await a.callTool({ name: 'count', arguments: {} })
+    const aSecond = await a.callTool({ name: 'count', arguments: {} })
+    expect(text(aSecond)).toContain('2')
+    const bFirst = await b.callTool({ name: 'count', arguments: {} })
+    expect(text(bFirst)).toContain('1')
+
+    await a.close()
+    await b.close()
+  })
 })

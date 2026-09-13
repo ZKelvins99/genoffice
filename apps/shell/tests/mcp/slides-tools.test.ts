@@ -10,8 +10,10 @@ import { McpServerService } from '../../src/main/mcp/mcp-server'
 import { outlineToTxns, parsePptxOutline } from '../../src/main/mcp/pptx-outline'
 import {
   createSlidesTools,
+  slidesDriver,
   type SlidesControl,
 } from '../../src/main/mcp/tools/slides-tools'
+import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
 
 /**
  * Slides tool surface over a real MCP session: headless create_pptx (markdown
@@ -56,6 +58,15 @@ async function startService(tools: ReturnType<typeof createSlidesTools>): Promis
   await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)))
 }
 
+/** content tools + the shared session tools wired against the same host, as the shell does */
+function sessionSurface(control: SlidesControl): ReturnType<typeof createSlidesTools> {
+  const host = createSessionHost()
+  return [
+    ...createSessionTools([slidesDriver(control)], host),
+    ...createSlidesTools({ defaultSaveDir: () => dir, slides: control }, host),
+  ]
+}
+
 function baseDeps(background?: boolean): {
   defaultSaveDir: () => string
   background?: boolean
@@ -89,7 +100,10 @@ describe('pptx outline mapping', () => {
     const slides = parsePptxOutline(
       'json',
       JSON.stringify({
-        slides: ['Just a body', { title: 'T', bullets: ['a', { text: 'b', level: 2, bullet: 'number' }] }],
+        slides: [
+          'Just a body',
+          { title: 'T', bullets: ['a', { text: 'b', level: 2, bullet: 'number' }] },
+        ],
       }),
     )
     expect(slides[0]).toEqual({ paragraphs: [{ text: 'Just a body' }] })
@@ -133,7 +147,7 @@ describe('pptx outline mapping', () => {
 
 describe('headless create_pptx', () => {
   it('writes a reparsable deck into the default dir', async () => {
-    await startService(createSlidesTools(baseDeps()))
+    await startService(createSlidesTools(baseDeps(), createSessionHost()))
     const result = await client!.callTool({
       name: 'create_pptx',
       arguments: { title: 'Deck Plan', outline: '# Intro\n- point one\n- point two\n\n# Next' },
@@ -157,13 +171,15 @@ describe('headless create_pptx', () => {
   })
 
   it('accepts a JSON outline and appends the extension to extensionless paths', async () => {
-    await startService(createSlidesTools(baseDeps()))
+    await startService(createSlidesTools(baseDeps(), createSessionHost()))
     const result = await client!.callTool({
       name: 'create_pptx',
       arguments: {
         title: 'Json Deck',
         format: 'json',
-        outline: JSON.stringify({ slides: [{ title: 'Hello', bullets: ['a', { text: 'b', level: 1 }] }] }),
+        outline: JSON.stringify({
+          slides: [{ title: 'Hello', bullets: ['a', { text: 'b', level: 1 }] }],
+        }),
         path: join(dir, 'json-deck'),
       },
     })
@@ -175,7 +191,7 @@ describe('headless create_pptx', () => {
   })
 
   it('enforces the shared path policy: absolute paths, clobber guard', async () => {
-    await startService(createSlidesTools(baseDeps()))
+    await startService(createSlidesTools(baseDeps(), createSessionHost()))
     const absolute = await client!.callTool({
       name: 'create_pptx',
       arguments: { title: 'X', outline: '# A', path: 'relative.pptx' },
@@ -204,18 +220,22 @@ describe('headless create_pptx', () => {
 
   it('is hidden when background is off, present when on (session tools unaffected)', async () => {
     const fake = fakeSlidesControl()
-    await startService(createSlidesTools({ ...baseDeps(false), slides: fake.control }))
+    await startService(
+      createSlidesTools({ ...baseDeps(false), slides: fake.control }, createSessionHost()),
+    )
     let names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).not.toContain('create_pptx')
-    expect(names).toContain('create_deck')
+    expect(names).toContain('read_deck')
 
     await client!.close()
     await service!.stop()
     service = undefined
-    await startService(createSlidesTools({ ...baseDeps(true), slides: fake.control }))
+    await startService(
+      createSlidesTools({ ...baseDeps(true), slides: fake.control }, createSessionHost()),
+    )
     names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).toContain('create_pptx')
-    expect(names).toContain('create_deck')
+    expect(names).toContain('read_deck')
   })
 })
 
@@ -248,13 +268,16 @@ function fakeSlidesControl(): { control: SlidesControl; saved: Array<{ path: str
 describe('visible deck session tools', () => {
   it('expose session lifecycle: create, read, apply, save-closes', async () => {
     const fake = fakeSlidesControl()
-    await startService(createSlidesTools({ ...baseDeps(), slides: fake.control }))
+    await startService(sessionSurface(fake.control))
 
     const before = await client!.callTool({ name: 'read_deck', arguments: {} })
     expect(before.isError).toBe(true)
-    expect(text(before.content)).toMatch(/no deck is open — call create_deck first/)
+    expect(text(before.content)).toMatch(/no session is open — call create_session first/)
 
-    const created = await client!.callTool({ name: 'create_deck', arguments: {} })
+    const created = await client!.callTool({
+      name: 'create_session',
+      arguments: { family: 'pptx' },
+    })
     expect(created.isError).toBeFalsy()
 
     const read = await client!.callTool({ name: 'read_deck', arguments: {} })
@@ -263,28 +286,40 @@ describe('visible deck session tools', () => {
 
     const apply = await client!.callTool({
       name: 'apply_slide_ops',
-      arguments: { ops: [{ op: 'addElement', target: { slide: 0 }, kind: 'textbox', offset: { x: 0, y: 0, cx: 1, cy: 1 } }] },
+      arguments: {
+        ops: [
+          {
+            op: 'addElement',
+            target: { slide: 0 },
+            kind: 'textbox',
+            offset: { x: 0, y: 0, cx: 1, cy: 1 },
+          },
+        ],
+      },
     })
     expect(apply.isError).toBeFalsy()
     expect(text(apply.content)).toContain('"applied": true')
 
     const saved = await client!.callTool({
-      name: 'save_deck',
+      name: 'save_session',
       arguments: { path: join(dir, 'out.pptx') },
     })
     expect(saved.isError).toBeFalsy()
     expect(fake.saved).toEqual([{ path: join(dir, 'out.pptx') }])
 
-    // the session ended with the save: further edits must ask for create_deck
-    const after = await client!.callTool({ name: 'apply_slide_ops', arguments: { ops: [{ op: 'x' }] } })
+    // the session ended with the save: further edits must ask for create_session
+    const after = await client!.callTool({
+      name: 'apply_slide_ops',
+      arguments: { ops: [{ op: 'x' }] },
+    })
     expect(after.isError).toBe(true)
-    expect(text(after.content)).toMatch(/no deck is open/)
+    expect(text(after.content)).toMatch(/no session is open/)
   })
 
   it('surfaces failed transactions as errors, keeps dry runs successful, caps batch size', async () => {
     const fake = fakeSlidesControl()
-    await startService(createSlidesTools({ ...baseDeps(), slides: fake.control }))
-    await client!.callTool({ name: 'create_deck', arguments: {} })
+    await startService(sessionSurface(fake.control))
+    await client!.callTool({ name: 'create_session', arguments: { family: 'pptx' } })
 
     const failed = await client!.callTool({
       name: 'apply_slide_ops',
@@ -307,9 +342,9 @@ describe('visible deck session tools', () => {
   })
 
   it('disappear entirely without a control (headless runs keep the file-only surface)', async () => {
-    await startService(createSlidesTools(baseDeps()))
+    await startService(createSlidesTools(baseDeps(), createSessionHost()))
     const names = (await client!.listTools()).tools.map((t) => t.name)
-    for (const tool of ['create_deck', 'read_deck', 'apply_slide_ops', 'save_deck']) {
+    for (const tool of ['create_session', 'read_deck', 'apply_slide_ops', 'save_session']) {
       expect(names).not.toContain(tool)
     }
   })

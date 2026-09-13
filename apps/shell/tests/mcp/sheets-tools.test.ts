@@ -9,8 +9,10 @@ import JSZip from 'jszip'
 import { McpServerService } from '../../src/main/mcp/mcp-server'
 import {
   createSheetsTools,
+  sheetsDriver,
   type SheetsControl,
 } from '../../src/main/mcp/tools/sheets-tools'
+import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
 
 /**
  * Sheets tool surface over a real MCP session: headless create_xlsx (row
@@ -55,6 +57,15 @@ async function startService(tools: ReturnType<typeof createSheetsTools>): Promis
   await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)))
 }
 
+/** content tools + the shared session tools wired against the same host, as the shell does */
+function sessionSurface(control: SheetsControl): ReturnType<typeof createSheetsTools> {
+  const host = createSessionHost()
+  return [
+    ...createSessionTools([sheetsDriver(control)], host),
+    ...createSheetsTools({ defaultSaveDir: () => dir, sheets: control }, host),
+  ]
+}
+
 function baseDeps(background?: boolean): {
   defaultSaveDir: () => string
   background?: boolean
@@ -69,7 +80,7 @@ function text(content: unknown): string {
 
 describe('headless create_xlsx', () => {
   it('writes a values-only workbook with typed cells', async () => {
-    await startService(createSheetsTools(baseDeps()))
+    await startService(createSheetsTools(baseDeps(), createSessionHost()))
     const result = await client!.callTool({
       name: 'create_xlsx',
       arguments: {
@@ -101,7 +112,7 @@ describe('headless create_xlsx', () => {
   })
 
   it('enforces the shared path policy: absolute paths, extension append, clobber guard', async () => {
-    await startService(createSheetsTools(baseDeps()))
+    await startService(createSheetsTools(baseDeps(), createSessionHost()))
     const relative = await client!.callTool({
       name: 'create_xlsx',
       arguments: { title: 'X', data: [[1]], path: 'relative.xlsx' },
@@ -127,7 +138,7 @@ describe('headless create_xlsx', () => {
   })
 
   it('rejects malformed data', async () => {
-    await startService(createSheetsTools(baseDeps()))
+    await startService(createSheetsTools(baseDeps(), createSessionHost()))
     // flat rows fail the input schema before the handler runs
     const flat = await client!.callTool({
       name: 'create_xlsx',
@@ -143,15 +154,19 @@ describe('headless create_xlsx', () => {
 
   it('is hidden when background is off, present when on (session tools unaffected)', async () => {
     const fake = fakeSheetsControl()
-    await startService(createSheetsTools({ ...baseDeps(false), sheets: fake.control }))
+    await startService(
+      createSheetsTools({ ...baseDeps(false), sheets: fake.control }, createSessionHost()),
+    )
     let names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).not.toContain('create_xlsx')
-    expect(names).toContain('create_sheet')
+    expect(names).toContain('read_sheet')
 
     await client!.close()
     await service!.stop()
     service = undefined
-    await startService(createSheetsTools({ ...baseDeps(true), sheets: fake.control }))
+    await startService(
+      createSheetsTools({ ...baseDeps(true), sheets: fake.control }, createSessionHost()),
+    )
     names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).toContain('create_xlsx')
   })
@@ -169,7 +184,8 @@ function fakeSheetsControl(): { control: SheetsControl; saved: Array<{ path: str
         if (wcId <= 0) throw new Error('no workbook')
         const p = payload as { path?: string; addresses?: string[]; ops?: unknown[] }
         if (command === 'save_sheet') {
-          if (p.path === 'D:/nope/blocked.xlsx') throw new Error('file already exists: D:/nope/blocked.xlsx')
+          if (p.path === 'D:/nope/blocked.xlsx')
+            throw new Error('file already exists: D:/nope/blocked.xlsx')
           saved.push({ path: p.path ?? '' })
           return { ok: true, path: p.path }
         }
@@ -190,13 +206,16 @@ function fakeSheetsControl(): { control: SheetsControl; saved: Array<{ path: str
 describe('visible grid session tools', () => {
   it('expose session lifecycle: create, read, apply, save-closes', async () => {
     const fake = fakeSheetsControl()
-    await startService(createSheetsTools({ ...baseDeps(), sheets: fake.control }))
+    await startService(sessionSurface(fake.control))
 
     const before = await client!.callTool({ name: 'read_sheet', arguments: {} })
     expect(before.isError).toBe(true)
-    expect(text(before.content)).toMatch(/no workbook is open — call create_sheet first/)
+    expect(text(before.content)).toMatch(/no session is open — call create_session first/)
 
-    const created = await client!.callTool({ name: 'create_sheet', arguments: {} })
+    const created = await client!.callTool({
+      name: 'create_session',
+      arguments: { family: 'xlsx' },
+    })
     expect(created.isError).toBeFalsy()
 
     const overview = await client!.callTool({ name: 'read_sheet', arguments: {} })
@@ -217,22 +236,33 @@ describe('visible grid session tools', () => {
     expect(applied.isError).toBeFalsy()
 
     const saved = await client!.callTool({
-      name: 'save_sheet',
+      name: 'save_session',
       arguments: { path: join(dir, 'out.xlsx') },
     })
     expect(saved.isError).toBeFalsy()
     expect(fake.saved).toEqual([{ path: join(dir, 'out.xlsx') }])
 
-    // the session ended with the save: further edits must ask for create_sheet
-    const after = await client!.callTool({ name: 'apply_sheet_ops', arguments: { ops: [{ op: 'set_cell' }] } })
+    // the session ended with the save: further edits must ask for create_session
+    const after = await client!.callTool({
+      name: 'apply_sheet_ops',
+      arguments: { ops: [{ op: 'set_cell' }] },
+    })
     expect(after.isError).toBe(true)
-    expect(text(after.content)).toMatch(/no workbook is open/)
+    expect(text(after.content)).toMatch(/no session is open/)
   })
 
   it('surfaces failed applies as errors and forwards dry runs untouched', async () => {
     const fake = fakeSheetsControl()
-    await startService(createSheetsTools({ ...baseDeps(), sheets: fake.control }))
-    await client!.callTool({ name: 'create_sheet', arguments: {} })
+    await startService(sessionSurface(fake.control))
+    await client!.callTool({ name: 'create_session', arguments: { family: 'xlsx' } })
+
+    // a docx target is refused before the bridge is reached (format guard)
+    const wrongExt = await client!.callTool({
+      name: 'save_session',
+      arguments: { path: join(dir, 'out.docx') },
+    })
+    expect(wrongExt.isError).toBe(true)
+    expect(text(wrongExt.content)).toMatch(/spreadsheet session must be saved as \.xlsx/)
 
     const failed = await client!.callTool({
       name: 'apply_sheet_ops',
@@ -242,7 +272,7 @@ describe('visible grid session tools', () => {
     expect(text(failed.content)).toContain('boom')
 
     const saved = await client!.callTool({
-      name: 'save_sheet',
+      name: 'save_session',
       arguments: { path: 'D:/nope/blocked.xlsx' },
     })
     expect(saved.isError).toBe(true)
@@ -250,9 +280,9 @@ describe('visible grid session tools', () => {
   })
 
   it('disappear entirely without a control (headless runs keep the file-only surface)', async () => {
-    await startService(createSheetsTools(baseDeps()))
+    await startService(createSheetsTools(baseDeps(), createSessionHost()))
     const names = (await client!.listTools()).tools.map((t) => t.name)
-    for (const tool of ['create_sheet', 'read_sheet', 'apply_sheet_ops', 'save_sheet']) {
+    for (const tool of ['create_session', 'read_sheet', 'apply_sheet_ops', 'save_session']) {
       expect(names).not.toContain(tool)
     }
   })

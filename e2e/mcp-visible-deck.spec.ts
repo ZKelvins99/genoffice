@@ -10,8 +10,8 @@ import JSZip from 'jszip'
 /**
  * MCP visible deck session, end to end against the real built app.
  *
- * create_deck (opens a visible slides tab) → apply_slide_ops (title + bullets,
- * seen live by the user) → read_deck (element ids) → save_deck (writes the
+ * create_session family=pptx (opens a visible slides tab) → apply_slide_ops (title + bullets,
+ * seen live by the user) → read_deck (element ids) → save_session (writes the
  * file). Asserts the on-disk pptx content and that a slides tab actually
  * appeared in the shell UI.
  */
@@ -150,7 +150,7 @@ test.describe('MCP visible deck session', () => {
 
       // 1. open a visible blank deck — the session tools do not need the
       // background switch, so they are registered with the default settings
-      const created = await call('create_deck', {})
+      const created = await call('create_session', { family: 'pptx' })
       expect(created.isError, created.text).toBeFalsy()
 
       // the shell UI shows a real slides tab (the visible half of the feature)
@@ -212,7 +212,7 @@ test.describe('MCP visible deck session', () => {
       expect(read.text).toContain('Deck From MCP')
 
       // 4. output to an explicit path (ends the session)
-      const saved = await call('save_deck', { path: outFile })
+      const saved = await call('save_session', { path: outFile })
       expect(saved.isError, saved.text).toBeFalsy()
       expect(existsSync(outFile)).toBe(true)
 
