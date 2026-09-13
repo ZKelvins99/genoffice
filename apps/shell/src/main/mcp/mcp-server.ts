@@ -29,7 +29,15 @@ export interface McpToolDefinition {
 
 export interface McpServerOptions {
   port: number
-  tools: McpToolDefinition[]
+  /** fixed tool set shared by every client session (omit when using toolsFactory) */
+  tools?: McpToolDefinition[]
+  /**
+   * Build a fresh tool set per client session instead of sharing `tools`.
+   * Tools that hold session state (the visible-editing session host) pass this
+   * so two connected clients never fight over one active session. Read the
+   * current settings inside the factory: it runs at connect time.
+   */
+  toolsFactory?: () => McpToolDefinition[]
   logger?: (message: string) => void
   /** EADDRINUSE retry tuning (exposed so tests do not wait out the backoff) */
   maxListenAttempts?: number
@@ -42,6 +50,7 @@ const MAX_BODY_BYTES = 32 * 1024 * 1024
 
 export class McpServerService {
   private readonly tools: McpToolDefinition[]
+  private readonly toolsFactory?: () => McpToolDefinition[]
   private readonly logger: (message: string) => void
   private readonly maxListenAttempts: number
   private readonly listenRetryDelayMs: number
@@ -59,7 +68,8 @@ export class McpServerService {
   private lifecycleGeneration = 0
 
   constructor(options: McpServerOptions) {
-    this.tools = options.tools
+    this.tools = options.tools ?? []
+    this.toolsFactory = options.toolsFactory
     this.port = options.port
     this.logger = options.logger ?? (() => undefined)
     this.maxListenAttempts = options.maxListenAttempts ?? 5
@@ -83,7 +93,10 @@ export class McpServerService {
 
   private createSessionServer(): McpServer {
     const server = new McpServer({ name: 'GenOffice', version: '0.1.0' })
-    for (const tool of this.tools) {
+    // a factory gives each connected client its own tool instances (session
+    // state lives in their closures); otherwise the fixed set is shared
+    const tools = this.toolsFactory ? this.toolsFactory() : this.tools
+    for (const tool of tools) {
       server.registerTool(
         tool.name,
         {

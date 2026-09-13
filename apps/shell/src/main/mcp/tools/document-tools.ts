@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { atomicWriteFile } from '../../../../../docs/src/main/atomic-write'
 import { createDocxBytes, readDocxText, type DocxSourceFormat } from '../doc-generation'
 import type { McpToolDefinition } from '../mcp-server'
+import { capabilityReport, generateExtension } from './formats'
+import type { FamilyDriver, SessionHost } from './session-tools'
 
 /**
  * Phase-1 MCP tool surface: docx generation and reading.
@@ -47,7 +49,7 @@ export interface DocsControl {
   runCommand: (wcId: number, command: McpEditorCommandName, payload: unknown) => Promise<unknown>
 }
 
-const DOCX_EXT = '.docx'
+const DOCX_EXT = `.${generateExtension('docx')}`
 
 /** sanitize a title into a file base name (mirrors docs' sanitizeAiDocFileBase) */
 export function sanitizeFileBase(title: string): string {
@@ -179,7 +181,7 @@ function createHeadlessDocxTool(deps: DocToolDeps): McpToolDefinition {
   }
 }
 
-export function createDocumentTools(deps: DocToolDeps): McpToolDefinition[] {
+export function createDocumentTools(deps: DocToolDeps, host: SessionHost): McpToolDefinition[] {
   return [
     // headless generation is opt-in: when background is off (the default),
     // clients only see the visible document session
@@ -218,60 +220,51 @@ export function createDocumentTools(deps: DocToolDeps): McpToolDefinition[] {
     {
       name: 'get_app_info',
       description:
-        'Report GenOffice version, the default save folder, and the document formats this server can generate.',
+        'Report GenOffice version, the default save folder, the document formats this server can ' +
+        "generate, and the editor's full open/save/export format matrix per family.",
       inputSchema: {},
       handler: () => ({
         name: 'GenOffice',
         version: deps.version,
         defaultSaveDir: deps.defaultSaveDir(),
         formats: ['docx', ...(deps.extraFormats ?? [])],
+        // editor truth vs. what this server exposes — see tools/formats.ts
+        families: capabilityReport(),
       }),
     },
-    ...createVisibleTools(deps),
+    ...createDocxContentTools(deps, host),
   ]
 }
 
 /**
- * Visible-editing tools: build a document inside a real GenOffice tab so the
- * user watches it take shape, then write it to a chosen path. These reuse the
- * built-in agent's editor pipeline (the same restricted-HTML parser, ops
- * executor and save path), so the result matches what the in-app AI produces.
+ * The docx session lifecycle as seen by the shared create_session / save_session
+ * tools. The content tools below address the tab this driver opened.
+ */
+export function documentDriver(docs: DocsControl): FamilyDriver {
+  return {
+    family: 'docx',
+    openBlankTab: () => docs.openBlankTab(),
+    save: async (wcId, path, overwrite) =>
+      docs.runCommand(wcId, 'save_document', { path, overwrite }),
+  }
+}
+
+/**
+ * Visible-editing content tools: edit the document the shared session opened, so
+ * the user watches it take shape. These reuse the built-in agent's editor
+ * pipeline (the same restricted-HTML parser, ops executor and save path), so the
+ * result matches what the in-app AI produces.
  *
  * Only registered when the shell wired a DocsControl — headless/unit runs keep
  * the phase-1 file-only surface.
  */
-function createVisibleTools(deps: DocToolDeps): McpToolDefinition[] {
+function createDocxContentTools(deps: DocToolDeps, host: SessionHost): McpToolDefinition[] {
   const docs = deps.docs
   if (!docs) return []
 
-  /** the tab the current visible session edits; one session at a time */
-  let activeDocWc: number | null = null
-
-  const requireActive = (): number => {
-    if (activeDocWc === null) {
-      throw new Error('no document is open — call create_document first')
-    }
-    return activeDocWc
-  }
+  const requireActive = (): number => host.require('docx')
 
   return [
-    {
-      name: 'create_document',
-      description:
-        'Open a new empty Word document in a visible GenOffice tab and start an editing session. ' +
-        'Follow it with insert_content / replace_blocks / apply_ops to write and format the document, ' +
-        'then save_document to write it to a path. The user sees each step happen in the app.',
-      inputSchema: {},
-      handler: async () => {
-        activeDocWc = await docs.openBlankTab()
-        return {
-          ok: true,
-          documentId: activeDocWc,
-          message:
-            'A new empty document is open in GenOffice. Add content, then call save_document.',
-        }
-      },
-    },
     {
       name: 'insert_content',
       description:
@@ -335,26 +328,6 @@ function createVisibleTools(deps: DocToolDeps): McpToolDefinition[] {
       handler: async () => {
         const wc = requireActive()
         return docs.runCommand(wc, 'read_document', {})
-      },
-    },
-    {
-      name: 'save_document',
-      description:
-        'Save the visible document to an absolute path and stop the editing session. ' +
-        'Refuses to replace an existing file unless overwrite is true. This is the output step.',
-      inputSchema: {
-        path: z.string().describe('absolute output path for the .docx file'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('allow replacing an existing file at `path`; default false'),
-      },
-      handler: async (args) => {
-        const wc = requireActive()
-        const payload = { path: String(args.path ?? ''), overwrite: args.overwrite === true }
-        const result = await docs.runCommand(wc, 'save_document', payload)
-        activeDocWc = null
-        return result
       },
     },
   ]

@@ -34,8 +34,7 @@ export interface OutlineSlide {
   paragraphs: OutlineParagraph[]
 }
 
-/** document-space EMU for a standard 16:9 deck (matches createBlankPptx) */
-const SLIDE_CX = 12_192_000
+/** standard 16:9 title/body placeholders in document-space EMU (matches createBlankPptx) */
 const TITLE = { x: 914_400, y: 685_800, cx: 10_363_200, cy: 1_127_760 }
 const BODY = { x: 914_400, y: 2_057_400, cx: 10_363_200, cy: 4_114_800 }
 /** PowerPoint's default bullet geometry per level (marL/indent EMU) */

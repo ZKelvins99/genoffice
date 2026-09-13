@@ -1,5 +1,4 @@
 import { statSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 import { createBlankPptx, openPptx, savePptxToFile } from '@genoffice/pptx-engine'
 // the ops index (not executor directly): importing it registers the whole op
@@ -7,6 +6,8 @@ import { createBlankPptx, openPptx, savePptxToFile } from '@genoffice/pptx-engin
 import { runTxn } from '../../../../../slides/src/main/ops'
 import { outlineToTxns, parsePptxOutline, type PptxSourceFormat } from '../pptx-outline'
 import { resolveOutputPath } from './document-tools'
+import { generateExtension } from './formats'
+import type { FamilyDriver, SessionHost } from './session-tools'
 import type { McpToolDefinition } from '../mcp-server'
 
 /**
@@ -56,7 +57,7 @@ export interface SlidesControl {
   saveDeck: (wcId: number, path: string, overwrite: boolean) => Promise<{ path: string }>
 }
 
-const PPTX_EXT = '.pptx'
+const PPTX_EXT = `.${generateExtension('pptx')}`
 
 /** the headless tool: outline -> ops -> pptx bytes written straight to disk */
 function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
@@ -121,56 +122,42 @@ function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
   }
 }
 
-export function createSlidesTools(deps: SlidesToolDeps): McpToolDefinition[] {
+export function createSlidesTools(deps: SlidesToolDeps, host: SessionHost): McpToolDefinition[] {
   return [
     // headless generation is opt-in, same rule as create_docx
     ...(deps.background === false ? [] : [createHeadlessPptxTool(deps)]),
-    ...createDeckSessionTools(deps),
+    ...createDeckContentTools(deps, host),
   ]
 }
 
 /**
- * Visible-deck session: build a presentation inside a real GenOffice slides tab
- * so the user watches each page take shape, then write it to a chosen path. The
- * control mutates the main-process session (the same one the app's own editing
- * and built-in AI use), so every step lands in the app's undo history and the
- * tab re-renders live.
+ * The pptx session lifecycle as seen by the shared create_session / save_session
+ * tools. The content tools below address the tab this driver opened.
+ */
+export function slidesDriver(slides: SlidesControl): FamilyDriver {
+  return {
+    family: 'pptx',
+    openBlankTab: () => slides.openBlankTab(),
+    save: (wcId, path, overwrite) => slides.saveDeck(wcId, path, overwrite),
+  }
+}
+
+/**
+ * Visible-deck content tools: edit the deck the shared session opened, so the
+ * user watches each page take shape. The control mutates the main-process
+ * session (the same one the app's own editing and built-in AI use), so every
+ * step lands in the app's undo history and the tab re-renders live.
  *
  * Only registered when the shell wired a SlidesControl — headless/unit runs
  * keep the file-only surface.
  */
-function createDeckSessionTools(deps: SlidesToolDeps): McpToolDefinition[] {
+function createDeckContentTools(deps: SlidesToolDeps, host: SessionHost): McpToolDefinition[] {
   const slides = deps.slides
   if (!slides) return []
 
-  /** the tab the current visible session edits; one session at a time */
-  let activeDeckWc: number | null = null
-
-  const requireActive = (): number => {
-    if (activeDeckWc === null) {
-      throw new Error('no deck is open — call create_deck first')
-    }
-    return activeDeckWc
-  }
+  const requireActive = (): number => host.require('pptx')
 
   return [
-    {
-      name: 'create_deck',
-      description:
-        'Open a new empty presentation in a visible GenOffice tab and start an editing session. ' +
-        'Follow it with apply_slide_ops to build the slides, then save_deck to write the file. ' +
-        'The user sees each step happen in the app.',
-      inputSchema: {},
-      handler: async () => {
-        activeDeckWc = await slides.openBlankTab()
-        return {
-          ok: true,
-          deckId: activeDeckWc,
-          message:
-            'A new empty presentation is open in GenOffice. Build slides, then call save_deck.',
-        }
-      },
-    },
     {
       name: 'read_deck',
       description:
@@ -216,27 +203,6 @@ function createDeckSessionTools(deps: SlidesToolDeps): McpToolDefinition[] {
           const details = (result.failures ?? []).map((f) => `[${f.index}] ${f.error}`).join('\n')
           throw new Error(details || 'the transaction could not be applied')
         }
-        return result
-      },
-    },
-    {
-      name: 'save_deck',
-      description:
-        'Save the visible presentation to an absolute path and stop the editing session. ' +
-        'Refuses to replace an existing file unless overwrite is true. This is the output step.',
-      inputSchema: {
-        path: z.string().describe('absolute output path for the .pptx file'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('allow replacing an existing file at `path`; default false'),
-      },
-      handler: async (args) => {
-        const wc = requireActive()
-        const filePath = String(args.path ?? '')
-        if (!isAbsolute(filePath)) throw new Error('path must be absolute')
-        const result = await slides.saveDeck(wc, filePath, args.overwrite === true)
-        activeDeckWc = null
         return result
       },
     },

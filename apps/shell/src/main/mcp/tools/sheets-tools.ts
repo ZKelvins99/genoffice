@@ -1,9 +1,10 @@
 import { statSync } from 'node:fs'
-import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 import { atomicWriteFile } from '../../../../../docs/src/main/atomic-write'
 import { rowsToXlsxBuffer } from '../../../../../sheets/src/gateway/csv-import'
 import { resolveOutputPath } from './document-tools'
+import { generateExtension } from './formats'
+import type { FamilyDriver, SessionHost } from './session-tools'
 import type { McpToolDefinition } from '../mcp-server'
 
 /**
@@ -47,7 +48,7 @@ export interface SheetsControl {
   ) => Promise<unknown>
 }
 
-const XLSX_EXT = '.xlsx'
+const XLSX_EXT = `.${generateExtension('xlsx')}`
 
 /** the headless tool: a row matrix -> values-only xlsx written straight to disk */
 function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
@@ -56,8 +57,8 @@ function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
     description:
       'Create an Excel .xlsx file (values only) and save it to disk without opening the app UI. ' +
       '`data` is a 2D array of rows; cells given as numbers become numeric cells, everything else is text. ' +
-      'Formulas are not evaluated headlessly — pass computed values, or use the visible create_sheet ' +
-      'session with set_formula ops instead. Returns the absolute path of the written file.',
+      'Formulas are not evaluated headlessly — pass computed values, or use the visible ' +
+      'create_session (family "xlsx") with set_formula ops instead. Returns the absolute path of the written file.',
     inputSchema: {
       title: z.string().describe('workbook title, used as the file name'),
       data: z
@@ -113,55 +114,42 @@ function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
   }
 }
 
-export function createSheetsTools(deps: SheetsToolDeps): McpToolDefinition[] {
+export function createSheetsTools(deps: SheetsToolDeps, host: SessionHost): McpToolDefinition[] {
   return [
     // headless generation is opt-in, same rule as create_docx/create_pptx
     ...(deps.background === false ? [] : [createHeadlessXlsxTool(deps)]),
-    ...createGridSessionTools(deps),
+    ...createGridContentTools(deps, host),
   ]
 }
 
 /**
- * Visible-grid session: fill a spreadsheet inside a real GenOffice tab so the
- * user watches the grid take shape, then write it to a chosen path. The ops are
- * the same zod-validated workbook DSL the built-in AI uses (planFromOps +
- * applyChangePlan), executed by the tab's renderer.
+ * The xlsx session lifecycle as seen by the shared create_session / save_session
+ * tools. The content tools below address the tab this driver opened.
+ */
+export function sheetsDriver(sheets: SheetsControl): FamilyDriver {
+  return {
+    family: 'xlsx',
+    openBlankTab: () => sheets.openBlankTab(),
+    save: (wcId, path, overwrite) => sheets.runCommand(wcId, 'save_sheet', { path, overwrite }),
+  }
+}
+
+/**
+ * Visible-grid content tools: fill the spreadsheet the shared session opened, so
+ * the user watches the grid take shape. The ops are the same zod-validated
+ * workbook DSL the built-in AI uses (planFromOps + applyChangePlan), executed by
+ * the tab's renderer.
  *
  * Only registered when the shell wired a SheetsControl — headless/unit runs
  * keep the file-only surface.
  */
-function createGridSessionTools(deps: SheetsToolDeps): McpToolDefinition[] {
+function createGridContentTools(deps: SheetsToolDeps, host: SessionHost): McpToolDefinition[] {
   const sheets = deps.sheets
   if (!sheets) return []
 
-  /** the tab the current visible session edits; one session at a time */
-  let activeSheetWc: number | null = null
-
-  const requireActive = (): number => {
-    if (activeSheetWc === null) {
-      throw new Error('no workbook is open — call create_sheet first')
-    }
-    return activeSheetWc
-  }
+  const requireActive = (): number => host.require('xlsx')
 
   return [
-    {
-      name: 'create_sheet',
-      description:
-        'Open a new empty spreadsheet in a visible GenOffice tab and start an editing session. ' +
-        'Follow it with apply_sheet_ops to fill the grid, then save_sheet to write the file. ' +
-        'The user sees each step happen in the app.',
-      inputSchema: {},
-      handler: async () => {
-        activeSheetWc = await sheets.openBlankTab()
-        return {
-          ok: true,
-          workbookId: activeSheetWc,
-          message:
-            'A new empty spreadsheet is open in GenOffice. Fill the grid, then call save_sheet.',
-        }
-      },
-    },
     {
       name: 'read_sheet',
       description:
@@ -217,30 +205,6 @@ function createGridSessionTools(deps: SheetsToolDeps): McpToolDefinition[] {
         if (result?.ok === false) {
           throw new Error(result.reason ?? 'the batch could not be applied')
         }
-        return result
-      },
-    },
-    {
-      name: 'save_sheet',
-      description:
-        'Save the visible spreadsheet to an absolute path and stop the editing session. ' +
-        'Refuses to replace an existing file unless overwrite is true. This is the output step.',
-      inputSchema: {
-        path: z.string().describe('absolute output path for the .xlsx file'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('allow replacing an existing file at `path`; default false'),
-      },
-      handler: async (args) => {
-        const wc = requireActive()
-        const filePath = String(args.path ?? '')
-        if (!isAbsolute(filePath)) throw new Error('path must be absolute')
-        const result = await sheets.runCommand(wc, 'save_sheet', {
-          path: filePath,
-          overwrite: args.overwrite === true,
-        })
-        activeSheetWc = null
         return result
       },
     },

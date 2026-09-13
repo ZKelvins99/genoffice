@@ -40,7 +40,7 @@ async function waitSession(wcId: number): Promise<Session> {
 function requireSession(wcId: number): Session {
   const session = sessions.get(wcId)
   if (!session) {
-    throw new Error('the deck session is gone — its tab was closed; call create_deck again')
+    throw new Error('the deck session is gone — its tab was closed; call create_session again')
   }
   return session
 }
@@ -108,7 +108,7 @@ export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
     runTxn: async (wcId: number, req: SlidesTxnRequest) => {
       const session = requireSession(wcId)
       const result = applySessionTxn(session, req as Parameters<typeof applySessionTxn>[1])
-      if (!result) throw new Error('the deck session is gone — call create_deck again')
+      if (!result) throw new Error('the deck session is gone — call create_session again')
       // The ordinary `slides:apply-txn` path has an originating renderer that
       // applies its own IPC return value; MCP runs in the main process, so the
       // tab would never hear about the change — scheduleDeckBroadcast no-ops

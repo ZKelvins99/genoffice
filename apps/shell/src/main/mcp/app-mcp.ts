@@ -1,8 +1,9 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
 import { McpLogger } from './mcp-logger'
-import { createDocumentTools, type DocsControl } from './tools/document-tools'
-import { createSlidesTools, type SlidesControl } from './tools/slides-tools'
-import { createSheetsTools, type SheetsControl } from './tools/sheets-tools'
+import { createDocumentTools, documentDriver, type DocsControl } from './tools/document-tools'
+import { createSlidesTools, slidesDriver, type SlidesControl } from './tools/slides-tools'
+import { createSheetsTools, sheetsDriver, type SheetsControl } from './tools/sheets-tools'
+import { createSessionHost, createSessionTools, type FamilyDriver } from './tools/session-tools'
 
 /**
  * Main-process wiring for the MCP server.
@@ -97,32 +98,53 @@ function buildTools(): McpToolDefinition[] {
     ...(deps.slidesControl ? ['pptx'] : []),
     ...(deps.sheetsControl ? ['xlsx'] : []),
   ]
+  // one session host per tool set: create_session / save_session drive whichever
+  // family is active, and each family's content tools address that same tab.
+  // buildTools runs once per client session (see the server's toolsFactory), so
+  // each connected client gets its own active session rather than sharing one.
+  const host = createSessionHost()
+  const drivers: FamilyDriver[] = [
+    ...(deps.docsControl ? [documentDriver(deps.docsControl)] : []),
+    ...(deps.slidesControl ? [slidesDriver(deps.slidesControl)] : []),
+    ...(deps.sheetsControl ? [sheetsDriver(deps.sheetsControl)] : []),
+  ]
   return [
-    ...createDocumentTools({
-      version: deps.version,
-      defaultSaveDir: deps.defaultSaveDir,
-      // headless create_docx is opt-in: off by default so the default surface is
-      // the visible document session
-      background: currentSettings.background,
-      // open_in_genoffice reports ok only when the file routed to a tab
-      openInTab: (filePath) => {
-        if (!deps) return
-        const opened = deps.openPath(filePath)
-        if (!opened) throw new Error(`could not open ${filePath} in GenOffice`)
+    // the session entry point first: an agent picking a tool sees create_session
+    ...createSessionTools(drivers, host),
+    ...createDocumentTools(
+      {
+        version: deps.version,
+        defaultSaveDir: deps.defaultSaveDir,
+        // headless create_docx is opt-in: off by default so the default surface is
+        // the visible document session
+        background: currentSettings.background,
+        // open_in_genoffice reports ok only when the file routed to a tab
+        openInTab: (filePath) => {
+          if (!deps) return
+          const opened = deps.openPath(filePath)
+          if (!opened) throw new Error(`could not open ${filePath} in GenOffice`)
+        },
+        docs: deps.docsControl,
+        extraFormats,
       },
-      docs: deps.docsControl,
-      extraFormats,
-    }),
-    ...createSlidesTools({
-      defaultSaveDir: deps.defaultSaveDir,
-      background: currentSettings.background,
-      slides: deps.slidesControl,
-    }),
-    ...createSheetsTools({
-      defaultSaveDir: deps.defaultSaveDir,
-      background: currentSettings.background,
-      sheets: deps.sheetsControl,
-    }),
+      host,
+    ),
+    ...createSlidesTools(
+      {
+        defaultSaveDir: deps.defaultSaveDir,
+        background: currentSettings.background,
+        slides: deps.slidesControl,
+      },
+      host,
+    ),
+    ...createSheetsTools(
+      {
+        defaultSaveDir: deps.defaultSaveDir,
+        background: currentSettings.background,
+        sheets: deps.sheetsControl,
+      },
+      host,
+    ),
   ]
 }
 
@@ -131,7 +153,9 @@ function ensureService(): McpServerService {
   if (!service) {
     service = new McpServerService({
       port: currentSettings.port,
-      tools: buildTools(),
+      // built per client session so concurrent clients do not share one
+      // active editing session; the factory re-reads settings at connect time
+      toolsFactory: buildTools,
       logger: mcpLogger,
     })
   }
