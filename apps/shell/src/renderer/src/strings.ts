@@ -170,13 +170,13 @@ export const strings = {
       '添加到客户端的 MCP 服务器配置（如 Claude Desktop 的 mcp.json、Cursor 的 MCP 设置）。',
     setMcpCap: '可用能力',
     setMcpCapDocs: '文档 (Word)',
-    setMcpCapDocsDesc: '创建、编辑、读取、保存 .docx，编辑过程在界面中实时可见',
+    setMcpCapDocsDesc: '创建、读取、编辑 .docx 并保存，可后台生成，也可在界面中实时演示',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: '即将支持',
     setMcpCapSlides: '演示 (PowerPoint)',
-    setMcpCapSlidesDesc: '创建、编辑、读取、保存 .pptx，编辑过程在界面中实时可见',
+    setMcpCapSlidesDesc: '从大纲逐页生成 .pptx，编辑过程实时可见，支持读取与保存',
     setMcpCapSheets: '表格 (Excel)',
-    setMcpCapSheetsDesc: '创建、编辑、读取、保存 .xlsx，编辑过程在界面中实时可见',
+    setMcpCapSheetsDesc: '创建 .xlsx 并填充数值与公式，网格实时更新，读取校验后保存',
     setMcpBg: '后台生成',
     setMcpBgDesc: '允许不打开界面，直接把文档生成到指定位置；关闭时在界面中可见地生成。',
     setMcpLog: '日志',
@@ -433,13 +433,16 @@ export const strings = {
       'Add this to the MCP server config of a client (the mcp.json of Claude Desktop, the MCP settings of Cursor, …).',
     setMcpCap: 'Available capabilities',
     setMcpCapDocs: 'Docs (Word)',
-    setMcpCapDocsDesc: 'Create, edit, read and save .docx — edits happen live in the app',
+    setMcpCapDocsDesc:
+      'Create, read and edit .docx, then save — generate in the background or watch edits live in the app',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Coming soon',
     setMcpCapSlides: 'Slides (PowerPoint)',
-    setMcpCapSlidesDesc: 'Create, edit, read and save .pptx — edits happen live in the app',
+    setMcpCapSlidesDesc:
+      'Build a .pptx from an outline page by page, live in the app; read, edit and save',
     setMcpCapSheets: 'Sheets (Excel)',
-    setMcpCapSheetsDesc: 'Create, edit, read and save .xlsx — edits happen live in the app',
+    setMcpCapSheetsDesc:
+      'Create .xlsx and fill in values and formulas with live grid updates; read, verify, save',
     setMcpBg: 'Background generation',
     setMcpBgDesc:
       'Write documents straight to a path without opening the UI; when off, generation happens visibly in the app.',
@@ -715,13 +718,15 @@ export const strings = {
     setMcpCap: '利用できる機能',
     setMcpCapDocs: '文書 (Word)',
     setMcpCapDocsDesc:
-      '.docx の作成・編集・読み取り・保存。編集の過程がアプリ内でリアルタイムに見えます',
+      '.docx の作成・読み取り・編集・保存。バックグラウンド生成にも、アプリ内でのライブ編集にも対応',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: '今後対応予定',
     setMcpCapSlides: 'プレゼンテーション (PowerPoint)',
-    setMcpCapSlidesDesc: '.pptx の作成・編集・読み取り・保存 — 編集の過程がアプリ内でリアルタイムに表示されます',
+    setMcpCapSlidesDesc:
+      'アウトラインから .pptx をページごとに生成し、ライブで確認。読み取り・編集・保存に対応',
     setMcpCapSheets: 'スプレッドシート (Excel)',
-    setMcpCapSheetsDesc: '.xlsx の作成・編集・読み取り・保存 — 編集の過程がアプリ内でリアルタイムに表示されます',
+    setMcpCapSheetsDesc:
+      '.xlsx を作成して値や数式を入力。グリッドがリアルタイムに更新され、読み込んで確認して保存',
     setMcpBg: 'バックグラウンド生成',
     setMcpBgDesc:
       'UI を開かずにドキュメントを指定の場所へ直接生成します。オフの場合はアプリ内で目に見える形で生成されます。',
@@ -991,13 +996,15 @@ export const strings = {
       '클라이언트의 MCP 서버 설정에 추가하세요(Claude Desktop의 mcp.json, Cursor의 MCP 설정 등).',
     setMcpCap: '사용 가능한 기능',
     setMcpCapDocs: '문서 (Word)',
-    setMcpCapDocsDesc: '.docx 생성, 편집, 읽기, 저장 — 편집 과정이 앱에서 실시간으로 표시됩니다',
+    setMcpCapDocsDesc:
+      '.docx 생성, 읽기, 편집 및 저장 — 백그라운드 생성도, 앱에서 실시간 편집도 가능',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: '곧 지원 예정',
     setMcpCapSlides: '프레젠테이션 (PowerPoint)',
-    setMcpCapSlidesDesc: '.pptx 생성, 편집, 읽기, 저장 — 편집 과정이 앱에서 실시간으로 표시됩니다',
+    setMcpCapSlidesDesc: '개요에서 .pptx를 페이지별로 실시간 생성 — 읽기, 편집, 저장 지원',
     setMcpCapSheets: '스프레드시트 (Excel)',
-    setMcpCapSheetsDesc: '.xlsx 생성, 편집, 읽기, 저장 — 편집 과정이 앱에서 실시간으로 표시됩니다',
+    setMcpCapSheetsDesc:
+      '.xlsx를 만들어 값과 수식을 채우면 그리드가 실시간 갱신 — 읽고 검증한 뒤 저장',
     setMcpBg: '백그라운드 생성',
     setMcpBgDesc:
       'UI를 열지 않고 문서를 지정 위치에 바로 생성합니다. 끄면 앱에서 실시간으로 표시됩니다.',
@@ -1274,13 +1281,15 @@ export const strings = {
     setMcpCap: 'Fonctions disponibles',
     setMcpCapDocs: 'Documents (Word)',
     setMcpCapDocsDesc:
-      'Créer, modifier, lire et enregistrer des .docx — les modifications sont visibles en direct',
+      'Créez, lisez et modifiez des .docx puis enregistrez — génération en arrière-plan ou édition en direct',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Bientôt disponible',
     setMcpCapSlides: 'Présentations (PowerPoint)',
-    setMcpCapSlidesDesc: 'Créer, modifier, lire et enregistrer des .pptx — les modifications apparaissent en direct dans l’application',
+    setMcpCapSlidesDesc:
+      'Générez un .pptx page par page depuis un plan, en direct ; lecture, édition et enregistrement',
     setMcpCapSheets: 'Feuilles de calcul (Excel)',
-    setMcpCapSheetsDesc: 'Créer, modifier, lire et enregistrer des .xlsx — les modifications apparaissent en direct dans l’application',
+    setMcpCapSheetsDesc:
+      'Créez un .xlsx et remplissez valeurs et formules avec mise à jour en direct ; lisez, vérifiez, enregistrez',
     setMcpBg: 'Génération en arrière-plan',
     setMcpBgDesc:
       'Génère les documents directement vers un chemin sans ouvrir l’interface ; désactivée, la génération est visible dans l’app.',
@@ -1564,13 +1573,15 @@ export const strings = {
     setMcpCap: 'Verfügbare Funktionen',
     setMcpCapDocs: 'Dokumente (Word)',
     setMcpCapDocsDesc:
-      '.docx erstellen, bearbeiten, lesen und speichern — die Bearbeitung ist live in der App sichtbar',
+      '.docx erstellen, lesen, bearbeiten und speichern — im Hintergrund erzeugen oder live zusehen',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Demnächst verfügbar',
     setMcpCapSlides: 'Präsentationen (PowerPoint)',
-    setMcpCapSlidesDesc: '.pptx erstellen, bearbeiten, lesen und speichern — Bearbeitungen erscheinen live in der App',
+    setMcpCapSlidesDesc:
+      '.pptx aus einer Gliederung Seite für Seite aufbauen, live in der App; lesen, bearbeiten, speichern',
     setMcpCapSheets: 'Tabellen (Excel)',
-    setMcpCapSheetsDesc: '.xlsx erstellen, bearbeiten, lesen und speichern — Bearbeitungen erscheinen live in der App',
+    setMcpCapSheetsDesc:
+      '.xlsx erstellen und Werte und Formeln mit Live-Aktualisierung füllen; lesen, prüfen, speichern',
     setMcpBg: 'Hintergrund-Generierung',
     setMcpBgDesc:
       'Dokumente direkt an einen Pfad schreiben, ohne die Oberfläche zu öffnen; ausgeschaltet erfolgt die Generierung sichtbar in der App.',
@@ -1850,13 +1861,16 @@ export const strings = {
       'Añade esto a la configuración MCP del cliente (mcp.json de Claude Desktop, ajustes de MCP de Cursor…).',
     setMcpCap: 'Funciones disponibles',
     setMcpCapDocs: 'Documentos (Word)',
-    setMcpCapDocsDesc: 'Crea, edita, lee y guarda .docx: la edición se ve en vivo en la app',
+    setMcpCapDocsDesc:
+      'Cree, lea y edite .docx y guarde — generación en segundo plano o edición en vivo',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Próximamente',
     setMcpCapSlides: 'Presentaciones (PowerPoint)',
-    setMcpCapSlidesDesc: 'Crea, edita, lee y guarda .pptx: la edición se ve en vivo en la app',
+    setMcpCapSlidesDesc:
+      'Genere un .pptx página a página desde un esquema, en vivo; leer, editar y guardar',
     setMcpCapSheets: 'Hojas de cálculo (Excel)',
-    setMcpCapSheetsDesc: 'Crea, edita, lee y guarda .xlsx: la edición se ve en vivo en la app',
+    setMcpCapSheetsDesc:
+      'Cree un .xlsx y rellene valores y fórmulas con actualización en vivo; leer, verificar, guardar',
     setMcpBg: 'Generación en segundo plano',
     setMcpBgDesc:
       'Escribe documentos directamente en una ruta sin abrir la interfaz; desactivado, la generación es visible en la app.',
@@ -2129,13 +2143,13 @@ export const strings = {
       'เพิ่มลงในการตั้งค่าเซิร์ฟเวอร์ MCP ของไคลเอ็นต์ (เช่น mcp.json ของ Claude Desktop หรือการตั้งค่า MCP ของ Cursor)',
     setMcpCap: 'ฟังก์ชันที่ใช้ได้',
     setMcpCapDocs: 'เอกสาร (Word)',
-    setMcpCapDocsDesc: 'สร้าง แก้ไข อ่าน และบันทึก .docx — เห็นการแก้ไขแบบเรียลไทม์ในแอป',
+    setMcpCapDocsDesc: 'สร้าง อ่าน แก้ไข .docx และบันทึก — สร้างแบบเบื้องหลังหรือดูการแก้ไขแบบสด ๆ',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'เร็ว ๆ นี้',
     setMcpCapSlides: 'งานนำเสนอ (PowerPoint)',
-    setMcpCapSlidesDesc: 'สร้าง แก้ไข อ่าน และบันทึก .pptx — เห็นการแก้ไขแบบเรียลไทม์ในแอป',
+    setMcpCapSlidesDesc: 'สร้าง .pptx จากโครงร่างทีละหน้าแบบสด ๆ; อ่าน แก้ไข และบันทึก',
     setMcpCapSheets: 'ตาราง (Excel)',
-    setMcpCapSheetsDesc: 'สร้าง แก้ไข อ่าน และบันทึก .xlsx — เห็นการแก้ไขแบบเรียลไทม์ในแอป',
+    setMcpCapSheetsDesc: 'สร้าง .xlsx และกรอกค่ากับสูตรพร้อมอัปเดตสด; อ่าน ตรวจสอบ และบันทึก',
     setMcpBg: 'การสร้างแบบเบื้องหลัง',
     setMcpBgDesc: 'เขียนเอกสารลงตำแหน่งที่ระบุโดยไม่ต้องเปิด UI; หากปิด การสร้างจะมองเห็นได้ในแอป',
     setMcpLog: 'การบันทึกปูม',
@@ -2408,13 +2422,15 @@ export const strings = {
     setMcpCap: 'Kemampuan yang tersedia',
     setMcpCapDocs: 'Dokumen (Word)',
     setMcpCapDocsDesc:
-      'Membuat, mengedit, membaca, dan menyimpan .docx — penyuntingan terlihat langsung di aplikasi',
+      'Buat, baca, dan edit .docx lalu simpan — hasilkan di latar belakang atau saksikan suntingan secara langsung',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Segera hadir',
     setMcpCapSlides: 'Presentasi (PowerPoint)',
-    setMcpCapSlidesDesc: 'Membuat, mengedit, membaca, dan menyimpan .pptx — penyuntingan terlihat langsung di aplikasi',
+    setMcpCapSlidesDesc:
+      'Bangun .pptx dari kerangka halaman demi halaman secara langsung; baca, edit, dan simpan',
     setMcpCapSheets: 'Lembar kerja (Excel)',
-    setMcpCapSheetsDesc: 'Membuat, mengedit, membaca, dan menyimpan .xlsx — penyuntingan terlihat langsung di aplikasi',
+    setMcpCapSheetsDesc:
+      'Buat .xlsx dan isi nilai serta rumus dengan pembaruan langsung; baca, verifikasi, simpan',
     setMcpBg: 'Generasi latar belakang',
     setMcpBgDesc:
       'Menulis dokumen langsung ke jalur tanpa membuka UI; saat nonaktif, pembuatan terlihat di aplikasi.',
@@ -2689,13 +2705,15 @@ export const strings = {
     setMcpCap: 'Доступные функции',
     setMcpCapDocs: 'Документы (Word)',
     setMcpCapDocsDesc:
-      'Создание, редактирование, чтение и сохранение .docx — правки видны в приложении в реальном времени',
+      'Создавайте, читайте и редактируйте .docx и сохраняйте — генерация в фоне или правки в реальном времени',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Скоро',
     setMcpCapSlides: 'Презентации (PowerPoint)',
-    setMcpCapSlidesDesc: 'Создание, редактирование, чтение и сохранение .pptx — правки видны в приложении в реальном времени',
+    setMcpCapSlidesDesc:
+      'Собирайте .pptx из плана страница за страницей в реальном времени; чтение, правка, сохранение',
     setMcpCapSheets: 'Таблицы (Excel)',
-    setMcpCapSheetsDesc: 'Создание, редактирование, чтение и сохранение .xlsx — правки видны в приложении в реальном времени',
+    setMcpCapSheetsDesc:
+      'Создавайте .xlsx и заполняйте значения и формулы с живым обновлением сетки; чтение, проверка, сохранение',
     setMcpBg: 'Фоновая генерация',
     setMcpBgDesc:
       'Записывает документы сразу по пути, не открывая интерфейс; когда выключено, генерация происходит наглядно в приложении.',
@@ -2969,13 +2987,14 @@ export const strings = {
       'أضِف إلى إعدادات خادم MCP في العميل (مثل mcp.json في Claude Desktop أو إعدادات MCP في Cursor).',
     setMcpCap: 'الإمكانات المتاحة',
     setMcpCapDocs: 'مستندات (Word)',
-    setMcpCapDocsDesc: 'إنشاء وتحرير وقراءة وحفظ ملفات .docx — تظهر التحريرات مباشرة في التطبيق',
+    setMcpCapDocsDesc:
+      'أنشئ واقرأ وحرِّر .docx ثم احفظ — توليد في الخلفية أو متابعة التعديل مباشرة',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'قريبًا',
     setMcpCapSlides: 'عروض تقديمية (PowerPoint)',
-    setMcpCapSlidesDesc: 'إنشاء وتحرير وقراءة وحفظ ملفات .pptx — تظهر التعديلات مباشرة في التطبيق',
+    setMcpCapSlidesDesc: 'ابنِ .pptx من مخطط صفحةً بصفحة ومباشرةً؛ قراءة وتحرير وحفظ',
     setMcpCapSheets: 'جداول بيانات (Excel)',
-    setMcpCapSheetsDesc: 'إنشاء وتحرير وقراءة وحفظ ملفات .xlsx — تظهر التعديلات مباشرة في التطبيق',
+    setMcpCapSheetsDesc: 'أنشئ .xlsx واملأ القيم والصيغ بتحديث مباشر؛ اقرأ وتحقق واحفظ',
     setMcpBg: 'التوليد في الخلفية',
     setMcpBgDesc:
       'كتابة المستندات مباشرة إلى مسار دون فتح الواجهة؛ عند إيقافه يتم التوليد بشكل مرئي في التطبيق.',
@@ -3241,13 +3260,16 @@ export const strings = {
       'Adicione à configuração de MCP do cliente (mcp.json do Claude Desktop, ajustes de MCP do Cursor…).',
     setMcpCap: 'Recursos disponíveis',
     setMcpCapDocs: 'Documentos (Word)',
-    setMcpCapDocsDesc: 'Crie, edite, leia e salve .docx — as edições acontecem ao vivo no app',
+    setMcpCapDocsDesc:
+      'Crie, leia e edite .docx e salve — geração em segundo plano ou edição ao vivo',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Em breve',
     setMcpCapSlides: 'Apresentações (PowerPoint)',
-    setMcpCapSlidesDesc: 'Crie, edite, leia e salve .pptx — as edições acontecem ao vivo no app',
+    setMcpCapSlidesDesc:
+      'Gere um .pptx página a página a partir de um esquema, ao vivo; ler, editar e salvar',
     setMcpCapSheets: 'Planilhas (Excel)',
-    setMcpCapSheetsDesc: 'Crie, edite, leia e salve .xlsx — as edições acontecem ao vivo no app',
+    setMcpCapSheetsDesc:
+      'Crie um .xlsx e preencha valores e fórmulas com atualização ao vivo; ler, verificar, salvar',
     setMcpBg: 'Geração em segundo plano',
     setMcpBgDesc:
       'Escreve documentos diretamente em um caminho sem abrir a interface; desligado, a geração acontece visível no app.',
@@ -3515,13 +3537,15 @@ export const strings = {
     setMcpCap: 'Funzioni disponibili',
     setMcpCapDocs: 'Documenti (Word)',
     setMcpCapDocsDesc:
-      'Crea, modifica, leggi e salva .docx — le modifiche avvengono in tempo reale nella app',
+      'Crea, leggi e modifica .docx e salva — generazione in background o modifica dal vivo',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'In arrivo',
     setMcpCapSlides: 'Presentazioni (PowerPoint)',
-    setMcpCapSlidesDesc: 'Creare, modificare, leggere e salvare .pptx — le modifiche avvengono in diretta nell’app',
+    setMcpCapSlidesDesc:
+      'Genera un .pptx da uno schema pagina per pagina, dal vivo; lettura, modifica e salvataggio',
     setMcpCapSheets: 'Fogli di calcolo (Excel)',
-    setMcpCapSheetsDesc: 'Creare, modificare, leggere e salvare .xlsx — le modifiche avvengono in diretta nell’app',
+    setMcpCapSheetsDesc:
+      'Crea un .xlsx e compila valori e formule con aggiornamento dal vivo; leggi, verifica, salva',
     setMcpBg: 'Generazione in background',
     setMcpBgDesc:
       'Scrive i documenti direttamente in un percorso senza aprire l’interfaccia; disattivata, la generazione avviene in modo visibile nell’app.',
@@ -3787,13 +3811,16 @@ export const strings = {
       'Dodaj do konfiguracji serwera MCP klienta (mcp.json w Claude Desktop, ustawienia MCP w Cursorze…).',
     setMcpCap: 'Dostępne funkcje',
     setMcpCapDocs: 'Dokumenty (Word)',
-    setMcpCapDocsDesc: 'Twórz, edytuj, czytaj i zapisuj .docx — zmiany widać na żywo w aplikacji',
+    setMcpCapDocsDesc:
+      'Twórz, czytaj i edytuj .docx i zapisuj — generowanie w tle lub edycja na żywo',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Wkrótce',
     setMcpCapSlides: 'Prezentacje (PowerPoint)',
-    setMcpCapSlidesDesc: 'Twórz, edytuj, czytaj i zapisuj .pptx — zmiany widać na żywo w aplikacji',
+    setMcpCapSlidesDesc:
+      'Buduj .pptx z konspektu strona po stronie, na żywo; czytanie, edycja i zapis',
     setMcpCapSheets: 'Arkusze (Excel)',
-    setMcpCapSheetsDesc: 'Twórz, edytuj, czytaj i zapisuj .xlsx — zmiany widać na żywo w aplikacji',
+    setMcpCapSheetsDesc:
+      'Utwórz .xlsx i wypełniaj wartościami i formułami na żywo; czytaj, sprawdzaj, zapisuj',
     setMcpBg: 'Generowanie w tle',
     setMcpBgDesc:
       'Zapisuje dokumenty bezpośrednio do ścieżki bez otwierania interfejsu; wyłączone — generowanie odbywa się widocznie w aplikacji.',
@@ -4050,13 +4077,15 @@ export const strings = {
     setMcpCap: 'Dostupné funkce',
     setMcpCapDocs: 'Docs (Word)',
     setMcpCapDocsDesc:
-      'Vytvářejte, upravujte, čtěte a ukládejte .docx — úpravy probíhají přímo v aplikaci',
+      'Vytvářejte, čtěte a upravujte .docx a ukládejte — generování na pozadí nebo živá úprava',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Již brzy',
     setMcpCapSlides: 'Prezentace (PowerPoint)',
-    setMcpCapSlidesDesc: 'Vytvářejte, upravujte, čtěte a ukládejte .pptx — úpravy probíhají přímo v aplikaci',
+    setMcpCapSlidesDesc:
+      'Vytvářejte .pptx z osnovy stranu po stranu, živě; čtení, úprava a ukládání',
     setMcpCapSheets: 'Tabulky (Excel)',
-    setMcpCapSheetsDesc: 'Vytvářejte, upravujte, čtěte a ukládejte .xlsx — úpravy probíhají přímo v aplikaci',
+    setMcpCapSheetsDesc:
+      'Vytvořte .xlsx a vyplňujte hodnoty a vzorce živě; čtěte, ověřujte, ukládejte',
     setMcpBg: 'Generování na pozadí',
     setMcpBgDesc:
       'Zapisuje dokumenty přímo na cestu bez otevírání rozhraní; při vypnutí probíhá generování viditelně v aplikaci.',
@@ -4335,13 +4364,15 @@ export const strings = {
     setMcpCap: 'Beschikbare functies',
     setMcpCapDocs: 'Documenten (Word)',
     setMcpCapDocsDesc:
-      'Maak, bewerk, lees en sla .docx op — bewerkingen zijn live in de app zichtbaar',
+      'Maak, lees en bewerk .docx en sla op — generatie op de achtergrond of live bewerken',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Binnenkort',
     setMcpCapSlides: 'Presentaties (PowerPoint)',
-    setMcpCapSlidesDesc: '.pptx maken, bewerken, lezen en opslaan — bewerkingen worden live in de app getoond',
+    setMcpCapSlidesDesc:
+      'Bouw een .pptx pagina voor pagina vanuit een outline, live; lezen, bewerken, opslaan',
     setMcpCapSheets: 'Werkbladen (Excel)',
-    setMcpCapSheetsDesc: '.xlsx maken, bewerken, lezen en opslaan — bewerkingen worden live in de app getoond',
+    setMcpCapSheetsDesc:
+      'Maak een .xlsx en vul waarden en formules met live updates; lezen, controleren, opslaan',
     setMcpBg: 'Generatie op achtergrond',
     setMcpBgDesc:
       'Schrijft documenten direct naar een pad zonder de interface te openen; uitgeschakeld gebeurt de generatie zichtbaar in de app.',
@@ -4608,13 +4639,15 @@ export const strings = {
     setMcpCap: 'Keupayaan tersedia',
     setMcpCapDocs: 'Dokumen (Word)',
     setMcpCapDocsDesc:
-      'Cipta, sunting, baca dan simpan .docx — suntingan berlangsung secara langsung dalam aplikasi',
+      'Cipta, baca dan sunting .docx kemudian simpan — jana di latar belakang atau lihat suntingan secara langsung',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'Akan datang',
     setMcpCapSlides: 'Persembahan (PowerPoint)',
-    setMcpCapSlidesDesc: 'Cipta, sunting, baca dan simpan .pptx — penyuntingan berlaku secara langsung dalam aplikasi',
+    setMcpCapSlidesDesc:
+      'Bina .pptx daripada rangka halaman demi halaman secara langsung; baca, sunting dan simpan',
     setMcpCapSheets: 'Helaian (Excel)',
-    setMcpCapSheetsDesc: 'Cipta, sunting, baca dan simpan .xlsx — penyuntingan berlaku secara langsung dalam aplikasi',
+    setMcpCapSheetsDesc:
+      'Cipta .xlsx dan isikan nilai serta formula dengan kemas kini langsung; baca, sahkan, simpan',
     setMcpBg: 'Penjanaan latar belakang',
     setMcpBgDesc:
       'Menulis dokumen terus ke laluan tanpa membuka UI; dimatikan, penjanaan berlangsung secara kelihatan dalam aplikasi.',
@@ -4876,13 +4909,14 @@ export const strings = {
       'הוסיפו לתצורת שרת ה-MCP של הלקוח (mcp.json של Claude Desktop, הגדרות ה-MCP של Cursor וכדומה).',
     setMcpCap: 'יכולות זמינות',
     setMcpCapDocs: 'מסמכים (Word)',
-    setMcpCapDocsDesc: 'יצירה, עריכה, קריאה ושמירה של .docx — העריכות מתבצעות בזמן אמת באפליקציה',
+    setMcpCapDocsDesc:
+      'יצירה, קריאה ועריכה של .docx ושמירה — יצירה ברקע או צפייה בעריכה חיה ביישום',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'בקרוב',
     setMcpCapSlides: 'מצגות (PowerPoint)',
-    setMcpCapSlidesDesc: 'יצירה, עריכה, קריאה ושמירה של .pptx — העריכות מתבצעות בזמן אמת באפליקציה',
+    setMcpCapSlidesDesc: 'בניית .pptx ממתאר דף אחר דף, חי ביישום; קריאה, עריכה ושמירה',
     setMcpCapSheets: 'גיליונות (Excel)',
-    setMcpCapSheetsDesc: 'יצירה, עריכה, קריאה ושמירה של .xlsx — העריכות מתבצעות בזמן אמת באפליקציה',
+    setMcpCapSheetsDesc: 'יצירת .xlsx ומילוי ערכים ונוסחאות עם עדכון חי; קריאה, אימות ושמירה',
     setMcpBg: 'יצירה ברקע',
     setMcpBgDesc:
       'כותב מסמכים ישירות לנתיב בלי לפתוח את הממשק; כשכבוי, היצירה מתבצעת באופן גלוי באפליקציה.',
@@ -5144,13 +5178,16 @@ export const strings = {
       'अपने क्लाइंट के MCP सर्वर कॉन्फ़िगरेशन में जोड़ें (Claude Desktop का mcp.json, Cursor की MCP सेटिंग्स आदि)।',
     setMcpCap: 'उपलब्ध क्षमताएँ',
     setMcpCapDocs: 'दस्तावेज़ (Word)',
-    setMcpCapDocsDesc: '.docx बनाएं, संपादित करें, पढ़ें और सहेजें — संपादन ऐप में लाइव दिखता है',
+    setMcpCapDocsDesc:
+      '.docx बनाएं, पढ़ें, संपादित करें और सहेजें — बैकग्राउंड में जनरेट करें या ऐप में लाइव संपादन देखें',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: 'जल्द आ रहा है',
     setMcpCapSlides: 'प्रेजेंटेशन (PowerPoint)',
-    setMcpCapSlidesDesc: '.pptx बनाएं, संपादित करें, पढ़ें और सहेजें — संपादन ऐप में लाइव दिखता है',
+    setMcpCapSlidesDesc:
+      'रूपरेखा से .pptx पृष्ठ दर पृष्ठ लाइव बनाएं; पढ़ें, संपादित करें और सहेजें',
     setMcpCapSheets: 'स्प्रेडशीट (Excel)',
-    setMcpCapSheetsDesc: '.xlsx बनाएं, संपादित करें, पढ़ें और सहेजें — संपादन ऐप में लाइव दिखता है',
+    setMcpCapSheetsDesc:
+      '.xlsx बनाएं और मान व सूत्र लाइव अपडेट के साथ भरें; पढ़ें, सत्यापित करें, सहेजें',
     setMcpBg: 'बैकग्राउंड जनरेशन',
     setMcpBgDesc:
       'UI खोले बिना दस्तावेज़ सीधे किसी पाथ पर लिखता है; बंद होने पर जनरेशन ऐप में दिखती है।',
@@ -5409,13 +5446,13 @@ export const strings = {
       '加入用戶端的 MCP 伺服器設定（如 Claude Desktop 的 mcp.json、Cursor 的 MCP 設定）。',
     setMcpCap: '可用功能',
     setMcpCapDocs: '文件 (Word)',
-    setMcpCapDocsDesc: '建立、編輯、讀取、儲存 .docx，編輯過程在介面中即時可見',
+    setMcpCapDocsDesc: '建立、讀取、編輯 .docx 並儲存，可背景產生，也可在介面中即時示範',
     setMcpCapPlanned: 'PDF',
     setMcpCapSoon: '即將支援',
     setMcpCapSlides: '簡報 (PowerPoint)',
-    setMcpCapSlidesDesc: '建立、編輯、讀取、儲存 .pptx，編輯過程在介面中即時可見',
+    setMcpCapSlidesDesc: '從大綱逐頁產生 .pptx，編輯過程即時可見，支援讀取與儲存',
     setMcpCapSheets: '試算表 (Excel)',
-    setMcpCapSheetsDesc: '建立、編輯、讀取、儲存 .xlsx，編輯過程在介面中即時可見',
+    setMcpCapSheetsDesc: '建立 .xlsx 並填入數值與公式，表格即時更新，讀取驗證後儲存',
     setMcpBg: '後台生成',
     setMcpBgDesc: '允許不開啟介面，直接將文件產生到指定位置；關閉時在介面中可見地產生。',
     setMcpLog: '日誌',
