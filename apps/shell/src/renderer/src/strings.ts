@@ -175,7 +175,7 @@ export const strings = {
     setMcpCapSlidesDesc: '支持从大纲逐页生成 .pptx，及读取与保存。',
     setMcpCapSheets: '表格 (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '支持读取 .pdf 的文本、页数与元数据；编辑即将支持。',
+    setMcpCapPdfDesc: '支持读取 .pdf 的文本、页数与元数据。',
     setMcpCapSheetsDesc: '支持创建 .xlsx、填充数值与公式，及读取校验与保存。',
     setMcpBg: '后台生成',
     setMcpBgDesc: '允许不打开界面，直接把文档生成到指定位置；关闭时在界面中可见地生成。',
@@ -438,7 +438,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Generate .pptx page by page from an outline; read and save.',
     setMcpCapSheets: 'Sheets (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Read .pdf text, page count and metadata; editing is coming soon.',
+    setMcpCapPdfDesc: 'Read .pdf text, page count and metadata.',
     setMcpCapSheetsDesc:
       'Create .xlsx, fill in values and formulas, then read back to verify before saving.',
     setMcpBg: 'Background generation',
@@ -720,7 +720,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'アウトラインから .pptx をページごとに生成、読み取りと保存に対応。',
     setMcpCapSheets: 'スプレッドシート (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '.pdf のテキスト・ページ数・メタデータの読み取りに対応。編集は近日対応。',
+    setMcpCapPdfDesc: '.pdf のテキスト・ページ数・メタデータの読み取りに対応。',
     setMcpCapSheetsDesc: '.xlsx の作成、値と数式の入力、読み込んで確認して保存に対応。',
     setMcpBg: 'バックグラウンド生成',
     setMcpBgDesc:
@@ -996,7 +996,7 @@ export const strings = {
     setMcpCapSlidesDesc: '개요에서 .pptx를 페이지별로 생성하고 읽기와 저장을 지원합니다.',
     setMcpCapSheets: '스프레드시트 (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '.pdf 텍스트, 페이지 수, 메타데이터 읽기를 지원합니다. 편집은 곧 지원됩니다.',
+    setMcpCapPdfDesc: '.pdf 텍스트, 페이지 수, 메타데이터 읽기를 지원합니다.',
     setMcpCapSheetsDesc: '.xlsx 생성, 값과 수식 채우기, 읽어서 검증 후 저장을 지원합니다.',
     setMcpBg: '백그라운드 생성',
     setMcpBgDesc:
@@ -1278,8 +1278,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Générer un .pptx page par page depuis un plan ; lire et enregistrer.',
     setMcpCapSheets: 'Feuilles de calcul (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc:
-      'Lecture du texte, du nombre de pages et des métadonnées .pdf ; édition à venir.',
+    setMcpCapPdfDesc: 'Lecture du texte, du nombre de pages et des métadonnées .pdf.',
     setMcpCapSheetsDesc:
       'Créer un .xlsx, remplir valeurs et formules, puis lire, vérifier et enregistrer.',
     setMcpBg: 'Génération en arrière-plan',
@@ -1569,7 +1568,7 @@ export const strings = {
     setMcpCapSlidesDesc: '.pptx seitenweise aus einer Gliederung erzeugen; lesen und speichern.',
     setMcpCapSheets: 'Tabellen (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '.pdf-Text, Seitenzahl und Metadaten lesen; Bearbeiten folgt später.',
+    setMcpCapPdfDesc: '.pdf-Text, Seitenzahl und Metadaten lesen.',
     setMcpCapSheetsDesc:
       '.xlsx erstellen, Werte und Formeln füllen, dann lesen, prüfen und speichern.',
     setMcpBg: 'Hintergrund-Generierung',
@@ -1856,7 +1855,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Generar un .pptx página a página desde un esquema; leer y guardar.',
     setMcpCapSheets: 'Hojas de cálculo (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Leer texto, número de páginas y metadatos de .pdf; edición próximamente.',
+    setMcpCapPdfDesc: 'Leer texto, número de páginas y metadatos de .pdf.',
     setMcpCapSheetsDesc:
       'Crear un .xlsx, rellenar valores y fórmulas, y leer, verificar y guardar.',
     setMcpBg: 'Generación en segundo plano',
@@ -2136,7 +2135,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'สร้าง .pptx จากโครงร่างทีละหน้า พร้อมอ่านและบันทึก',
     setMcpCapSheets: 'ตาราง (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'อ่านข้อความ จำนวนหน้า และเมทาดาทาของ .pdf; การแก้ไขเร็ว ๆ นี้',
+    setMcpCapPdfDesc: 'อ่านข้อความ จำนวนหน้า และเมทาดาทาของ .pdf',
     setMcpCapSheetsDesc: 'สร้าง .xlsx กรอกค่าและสูตร อ่านเพื่อตรวจสอบและบันทึก',
     setMcpBg: 'การสร้างแบบเบื้องหลัง',
     setMcpBgDesc: 'เขียนเอกสารลงตำแหน่งที่ระบุโดยไม่ต้องเปิด UI; หากปิด การสร้างจะมองเห็นได้ในแอป',
@@ -2415,7 +2414,7 @@ export const strings = {
       'Menghasilkan .pptx halaman demi halaman dari kerangka; membaca dan menyimpan.',
     setMcpCapSheets: 'Lembar kerja (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Membaca teks, jumlah halaman, dan metadata .pdf; penyuntingan segera.',
+    setMcpCapPdfDesc: 'Membaca teks, jumlah halaman, dan metadata .pdf.',
     setMcpCapSheetsDesc:
       'Membuat .xlsx, mengisi nilai dan rumus, lalu membaca, memverifikasi, dan menyimpan.',
     setMcpBg: 'Generasi latar belakang',
@@ -2696,7 +2695,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Постраничная генерация .pptx из плана; чтение и сохранение.',
     setMcpCapSheets: 'Таблицы (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Чтение текста, числа страниц и метаданных .pdf; редактирование — скоро.',
+    setMcpCapPdfDesc: 'Чтение текста, числа страниц и метаданных .pdf.',
     setMcpCapSheetsDesc:
       'Создание .xlsx, заполнение значениями и формулами, чтение, проверка и сохранение.',
     setMcpBg: 'Фоновая генерация',
@@ -2977,7 +2976,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'توليد .pptx صفحةً بصفحة من مخطط؛ القراءة والحفظ.',
     setMcpCapSheets: 'جداول بيانات (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'قراءة نص .pdf وعدد صفحاته وبياناته الوصفية؛ التحرير قادم قريبًا.',
+    setMcpCapPdfDesc: 'قراءة نص .pdf وعدد صفحاته وبياناته الوصفية.',
     setMcpCapSheetsDesc: 'إنشاء .xlsx وتعبئة القيم والصيغ، ثم القراءة والتحقق والحفظ.',
     setMcpBg: 'التوليد في الخلفية',
     setMcpBgDesc:
@@ -3249,7 +3248,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Gerar um .pptx página a página a partir de um esquema; ler e salvar.',
     setMcpCapSheets: 'Planilhas (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Ler texto, número de páginas e metadados de .pdf; edição em breve.',
+    setMcpCapPdfDesc: 'Ler texto, número de páginas e metadados de .pdf.',
     setMcpCapSheetsDesc: 'Criar um .xlsx, preencher valores e fórmulas, e ler, verificar e salvar.',
     setMcpBg: 'Geração em segundo plano',
     setMcpBgDesc:
@@ -3522,7 +3521,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Generare un .pptx pagina per pagina da uno schema; leggere e salvare.',
     setMcpCapSheets: 'Fogli di calcolo (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Leggere testo, numero di pagine e metadati dai .pdf; modifica in arrivo.',
+    setMcpCapPdfDesc: 'Leggere testo, numero di pagine e metadati dai .pdf.',
     setMcpCapSheetsDesc:
       'Creare un .xlsx, compilare valori e formule, leggere, verificare e salvare.',
     setMcpBg: 'Generazione in background',
@@ -3795,7 +3794,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Generowanie .pptx strona po stronie z konspektu; czytanie i zapisywanie.',
     setMcpCapSheets: 'Arkusze (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Odczyt tekstu, liczby stron i metadanych .pdf; edycja wkrótce.',
+    setMcpCapPdfDesc: 'Odczyt tekstu, liczby stron i metadanych .pdf.',
     setMcpCapSheetsDesc:
       'Tworzenie .xlsx, wypełnianie wartościami i formułami, czytanie, sprawdzanie i zapisywanie.',
     setMcpBg: 'Generowanie w tle',
@@ -4058,7 +4057,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Generování .pptx stranu po stranu z osnovy; čtení a ukládání.',
     setMcpCapSheets: 'Tabulky (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Čtení textu, počtu stránek a metadat .pdf; úprava již brzy.',
+    setMcpCapPdfDesc: 'Čtení textu, počtu stránek a metadat .pdf.',
     setMcpCapSheetsDesc:
       'Vytváření .xlsx, vyplňování hodnot a vzorců, čtení, ověřování a ukládání.',
     setMcpBg: 'Generování na pozadí',
@@ -4344,7 +4343,7 @@ export const strings = {
       'Een .pptx pagina voor pagina genereren vanuit een outline; lezen en opslaan.',
     setMcpCapSheets: 'Werkbladen (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '.pdf-tekst, pagina-aantal en metadata lezen; bewerken volgt later.',
+    setMcpCapPdfDesc: '.pdf-tekst, pagina-aantal en metadata lezen.',
     setMcpCapSheetsDesc:
       'Een .xlsx maken, waarden en formules invullen, daarna lezen, controleren en opslaan.',
     setMcpBg: 'Generatie op achtergrond',
@@ -4617,7 +4616,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'Jana .pptx halaman demi halaman daripada rangka; baca dan simpan.',
     setMcpCapSheets: 'Helaian (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'Baca teks, bilangan halaman dan metadata .pdf; penyuntingan akan datang.',
+    setMcpCapPdfDesc: 'Baca teks, bilangan halaman dan metadata .pdf.',
     setMcpCapSheetsDesc: 'Cipta .xlsx, isikan nilai dan formula, kemudian baca, sahkan dan simpan.',
     setMcpBg: 'Penjanaan latar belakang',
     setMcpBgDesc:
@@ -4885,7 +4884,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'יצירת .pptx דף אחר דף ממתאר; קריאה ושמירה.',
     setMcpCapSheets: 'גיליונות (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: 'קריאת טקסט, מספר עמודים ומטא-נתונים של .pdf; עריכה בקרוב.',
+    setMcpCapPdfDesc: 'קריאת טקסט, מספר עמודים ומטא-נתונים של .pdf.',
     setMcpCapSheetsDesc: 'יצירת .xlsx ומילוי ערכים ונוסחאות; קריאה, אימות ושמירה.',
     setMcpBg: 'יצירה ברקע',
     setMcpBgDesc:
@@ -5153,7 +5152,7 @@ export const strings = {
     setMcpCapSlidesDesc: 'रूपरेखा से .pptx पृष्ठ दर पृष्ठ बनाना; पढ़ना और सहेजना समर्थित है।',
     setMcpCapSheets: 'स्प्रेडशीट (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '.pdf का टेक्स्ट, पृष्ठ संख्या और मेटाडेटा पढ़ना समर्थित; संपादन जल्द।',
+    setMcpCapPdfDesc: '.pdf का टेक्स्ट, पृष्ठ संख्या और मेटाडेटा पढ़ना समर्थित।',
     setMcpCapSheetsDesc: '.xlsx बनाना, मान व सूत्र भरना, पढ़कर सत्यापित कर सहेजना समर्थित है।',
     setMcpBg: 'बैकग्राउंड जनरेशन',
     setMcpBgDesc:
@@ -5418,7 +5417,7 @@ export const strings = {
     setMcpCapSlidesDesc: '支援從大綱逐頁產生 .pptx，及讀取與儲存。',
     setMcpCapSheets: '試算表 (Excel)',
     setMcpCapPdf: 'PDF',
-    setMcpCapPdfDesc: '支援讀取 .pdf 的文字、頁數與中繼資料；編輯即將支援。',
+    setMcpCapPdfDesc: '支援讀取 .pdf 的文字、頁數與中繼資料。',
     setMcpCapSheetsDesc: '支援建立 .xlsx、填入數值與公式，及讀取驗證與儲存。',
     setMcpBg: '後台生成',
     setMcpBgDesc: '允許不開啟介面，直接將文件產生到指定位置；關閉時在介面中可見地產生。',

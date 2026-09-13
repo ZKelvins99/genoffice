@@ -6,12 +6,12 @@ import { readPdfText } from '../../../../../pdf/src/main/read-text'
 import type { McpToolDefinition } from '../mcp-server'
 
 /**
- * PDF reading — the registry's `pdf` family currently exposes read-only MCP
- * access (`mcp.read`, no session, no generation): the pdf app is a viewer, so
- * an agent reads a PDF's text layer directly from disk through the same
+ * PDF reading — the registry's `pdf` family exposes read-only MCP access
+ * (`mcp.read`, no session, no generation): the pdf app is a viewer, so an
+ * agent reads a PDF's text layer directly from disk through the same
  * main-process pdfium the editor uses. Like read_docx, this is headless and
- * always registered; the settings pane keeps the PDF row "coming soon" until
- * the family also drives the editor.
+ * always registered. Read-only is the final design — MCP does not drive the
+ * pdf editor.
  */
 
 const PDF_EXT = '.pdf'

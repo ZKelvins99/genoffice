@@ -102,8 +102,8 @@ export const FORMAT_FAMILIES: readonly FormatFamily[] = [
     editorSave: ['pdf'],
     // the PDF app converts on-device to the three editable formats
     editorExport: ['docx', 'xlsx', 'pptx'],
-    // read-only for now (headless text extraction): the settings pane keeps the
-    // family "coming soon" until MCP also drives the editor
+    // read-only by design: the pdf app is a viewer, MCP exposes text
+    // extraction only and does not drive the editor
     mcp: { read: 'pdf' },
   },
 ]

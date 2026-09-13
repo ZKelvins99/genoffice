@@ -328,7 +328,7 @@ curl -s -o /dev/null -w 'reuse   -> %{http_code}\n' -X POST "http://127.0.0.1:${
 - **改端口**：设置里把端口改成 `3094` → `curl -s http://127.0.0.1:3094/health` 应为 ok，3093 失效；
   连接信息区的三个 URL 同步变为 3094。测完改回。
 - **后台生成开关即时生效**：开→`tools` 多出 `create_docx`、`create_pptx`、`create_xlsx`；关→消失（对应旧会话已失效，见 §9 的 404 行为）。
-- **能力行**：设置 → MCP 设置 → 可用能力 应列出"文档 (Word)"、"演示 (PowerPoint)"、"表格 (Excel)"，随后是"PDF / 即将支持"。
+- **能力行**：设置 → MCP 设置 → 可用能力 应列出"文档 (Word)"、"演示 (PowerPoint)"、"表格 (Excel)"、"PDF"（读取，只读是最终设计）。
 
 ## 11. 演示（PPT，两个路径）
 
@@ -459,7 +459,7 @@ node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
 | 7   | 日志           | 开关控制写入；含 listening/session/tool ok 行；清除有效                                                                                    |
 | 8   | SSE + stdio 桥 | SSE 握手回包；桥转发 tools/list 成功                                                                                                       |
 | 9   | 会话生命周期   | DELETE 后旧 session 404                                                                                                                    |
-| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步；能力行含文档+演示+表格+PDF(读取,编辑即将支持)                                                |
+| 10  | 设置行为       | 改端口/切后台开关即时生效，连接信息 URL 同步；能力行含文档+演示+表格+PDF(读取)                                                             |
 | 11  | 演示 (PPT)     | 后台大纲落盘（PPT/WPS 可开）；可见会话建页→实时渲染→读回→存盘→结束后报错                                                                   |
 | 12  | 表格 (xlsx)    | 后台纯值落盘（数值类型正确）；可见会话填值+公式→实时渲染→读回→存盘（公式保真）→结束后报错                                                  |
 

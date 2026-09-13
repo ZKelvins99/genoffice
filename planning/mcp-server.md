@@ -202,8 +202,8 @@ text editing), so MCP gets PDF **reading** without any new dependency:
 `apps/pdf/src/main/read-text.ts` walks pdfium textpages over the shared
 `chainPdfium`/`withDocument` helpers, and `tools/pdf-tools.ts` exposes it as a
 headless, session-free tool — always registered, like `read_docx`. The registry
-records the family as `mcp: { read: 'pdf' }` (no generate/save) and the settings
-pane keeps the PDF row "coming soon" until the editor itself is driven.
+records the family as `mcp: { read: 'pdf' }` (no generate/save); read-only is
+the final design — MCP does not drive the pdf editor.
 
 | Tool       | Input                       | Effect                                                                                                                                       |
 | ---------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -435,7 +435,7 @@ and exact parity with the app possible.
   reset at startup, tool calls logged by `mcp-server.ts`)
   and an **Available capabilities** group (rows driven by
   `McpStatus.capabilities` — Documents/Slides/Sheets live per registered
-  control, PDF is read-only via `read_pdf` with editing still upcoming) so
+  control, PDF is read-only via `read_pdf` by design; no editing is planned) so
   future tool families slot in as new rows.
   Default **off**.
 
