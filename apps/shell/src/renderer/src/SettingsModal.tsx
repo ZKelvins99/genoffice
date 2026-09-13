@@ -1568,13 +1568,13 @@ export function SettingsModal({
                     ['docs', 'setMcpCapDocs', 'setMcpCapDocsDesc'],
                     ['slides', 'setMcpCapSlides', 'setMcpCapSlidesDesc'],
                     ['sheets', 'setMcpCapSheets', 'setMcpCapSheetsDesc'],
+                    ['pdf', 'setMcpCapPdf', 'setMcpCapPdfDesc'],
                   ] as Array<[string, StringKey, StringKey]>
                 )
                   .filter(([id]) => mcpCaps.includes(id))
                   .map(([, labelKey, descKey]) => (
                     <Field key={labelKey} label={t(labelKey)} value={t(descKey)} />
                   ))}
-                <Field label={t('setMcpCapPlanned')} value={t('setMcpCapSoon')} />
               </>
             )}
             {section === 'about' && (

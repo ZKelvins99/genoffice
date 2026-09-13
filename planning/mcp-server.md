@@ -435,8 +435,8 @@ and exact parity with the app possible.
   reset at startup, tool calls logged by `mcp-server.ts`)
   and an **Available capabilities** group (rows driven by
   `McpStatus.capabilities` — Documents/Slides/Sheets live per registered
-  control; PDF announced as upcoming) so future tool families slot in as new
-  rows.
+  control, PDF is read-only via `read_pdf` with editing still upcoming) so
+  future tool families slot in as new rows.
   Default **off**.
 
 ## Security

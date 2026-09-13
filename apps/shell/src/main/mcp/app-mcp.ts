@@ -223,6 +223,9 @@ export function mcpStatus(): McpStatus {
       'docs',
       ...(deps?.slidesControl ? ['slides'] : []),
       ...(deps?.sheetsControl ? ['sheets'] : []),
+      // read_pdf is headless and always registered, so the family is always
+      // visible (read-only until the pdf editor is driven)
+      'pdf',
     ],
   }
 }

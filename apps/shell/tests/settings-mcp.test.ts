@@ -148,12 +148,11 @@ describe('MCP settings pane', () => {
     expect(host.querySelector('.set-status-dot.running')).toBeNull()
     expect(host.textContent).toContain('Not running')
 
-    // documents are live; slides/sheets follow the build's capabilities and the
-    // remaining families stay announced as upcoming
+    // documents are live; slides/sheets/pdf follow the build's capabilities —
+    // with no capability report only the docs row shows
     expect(host.textContent).toContain('Docs (Word)')
     expect(host.textContent).not.toContain('Slides (PowerPoint)')
-    expect(host.textContent).toContain('PDF')
-    expect(host.textContent).toContain('Coming soon')
+    expect(host.textContent).not.toContain('Read .pdf text')
   })
 
   it('lists slides and sheets capability rows when the build exposes them', async () => {
@@ -167,7 +166,19 @@ describe('MCP settings pane', () => {
     expect(host.textContent).toContain('Slides (PowerPoint)')
     expect(host.textContent).toContain('Sheets (Excel)')
     expect(host.textContent).toContain('Docs (Word)')
-    expect(host.textContent).toContain('Coming soon')
+    expect(host.textContent).not.toContain('Read .pdf text')
+  })
+
+  it('shows the read-only pdf row once the build advertises it', async () => {
+    await renderModal({
+      running: false,
+      enabled: false,
+      port: 3093,
+      url: null,
+      capabilities: ['docs', 'slides', 'sheets', 'pdf'],
+    })
+    expect(host.textContent).toContain('PDF')
+    expect(host.textContent).toContain('Read .pdf text, page count and metadata')
   })
 
   it('background and logging toggles persist through setMcpSettings', async () => {
