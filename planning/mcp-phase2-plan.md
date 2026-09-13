@@ -33,8 +33,8 @@ Status: **已完成**（2026-09-12，提交 ef4b620）
 ### M1.2 可见会话(演示逐页生成,用户可观看)
 
 - [x] `SlidesControl`(`{ openBlankTab, runTxn }` 形态)注入 `McpRuntimeDeps`;无注入时工具不注册
-- [x] 会话工具:`create_deck`(开新标签页)→ `read_deck`(页/元素索引)→
-      `apply_slide_ops`(批量 op,复用 `runTxn` 的原子/dryRun)→ `save_deck`(指定路径)
+- [x] 会话工具:`create_session family=pptx`(开新标签页)→ `read_deck`(页/元素索引)→
+      `apply_slide_ops`(批量 op,复用 `runTxn` 的原子/dryRun)→ `save_session`(指定路径)
 - [x] 编辑落库走主进程会话:`runTxn` + history + `scheduleDeckBroadcast`(对齐
       `slides:apply-txn` 行为),app 窗口实时可见
       —— `applySessionTxn` 从 `slides:apply-txn` IPC 处理器中提取,
@@ -42,7 +42,7 @@ Status: **已完成**（2026-09-12，提交 ef4b620）
       no-op(它假设发起方渲染器会自己应用 IPC 返回值,而 MCP 没有发起方),
       所以桥在事务成功后主动向标签页 webContents 推送一次 deck-changed
       (多窗口场景仍由 broadcast 负责;渲染器幂等应用)
-- [x] 会话结束语义与 docs 一致:`save_deck` 后会话关闭,再编辑报错提示先 `create_deck`
+- [x] 会话结束语义与 docs 一致:`save_session` 后会话关闭,再编辑报错提示先 `create_session`
 
 ### M1.3 集成收尾
 
@@ -93,12 +93,12 @@ shell 主进程已在用);公式保真走 Rust sidecar(`XlsxSidecarClient` + rec
       转发给 `planFromOps` + `applyChangePlan`(与内置 AI 共用执行器)
       —— 渲染层 `apps/sheets/src/renderer/mcp-bridge.ts`:read 走 AI 的
       workbook readers,save 走 `handleSave` 新增的显式路径参数
-- [x] 会话工具:`create_sheet`(开空表标签页)→ `read_sheet`(范围/单元格读取)→
+- [x] 会话工具:`create_session family=xlsx`(开空表标签页)→ `read_sheet`(范围/单元格读取)→
       `apply_sheet_ops`(`set_cell`/`set_formula`/`fill_range`/`add_sheet`…)→
-      `save_sheet`(指定路径,走既有保存管线)
-      —— `create_sheet` 与 app 内"新建表格"一致,先落一个真实空白 .xlsx
+      `save_session`(指定路径,走既有保存管线)
+      —— `create_session family=xlsx` 与 app 内"新建表格"一致,先落一个真实空白 .xlsx
       再打开(sidecar 保存管线需要落盘文件;内存演示网格无法保存)
-      —— `save_sheet`:保存请求新增 `targetPath`/`overwrite` 字段,免对话框
+      —— `save_session`:保存请求新增 `targetPath`/`overwrite` 字段,免对话框
       走常规 sidecar 保存管线(含 recalc 缓存值),docs:save-to 同款覆盖保护
 - [x] `SheetsControl` 注入 + 门控 + 翻转重启,语义与 docs/slides 对齐
 - [x] 20 语言 strings(新设置文案);能力行更新

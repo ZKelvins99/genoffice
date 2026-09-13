@@ -114,7 +114,7 @@ if (cmd === 'tools') {
 
 4. 准备一个输出目录，例如 `export OUT=$(mktemp -d)`（或自定 `D:/tmp/mcp-test`）。
 
-> 注意：可见会话的测试会**真实打开标签页**，请在 GenOffice 窗口里同步观察；`save_document` 会写真实文件。
+> 注意：可见会话的测试会**真实打开标签页**，请在 GenOffice 窗口里同步观察；`save_session` 会写真实文件。
 
 ---
 
@@ -132,20 +132,19 @@ curl -s http://127.0.0.1:${MCP_PORT:-3093}/health
 node "$TEMP/mcp-probe.mjs" tools
 ```
 
-**期望（后台生成 = 关，默认）**，17 个工具：
+**期望（后台生成 = 关，默认）**，13 个工具：
 
 ```
-apply_ops, apply_sheet_ops, apply_slide_ops, create_deck, create_document,
-create_sheet, get_app_info, insert_content, open_in_genoffice, read_deck,
-read_docx, read_document, read_sheet, replace_blocks, save_deck,
-save_document, save_sheet
+apply_ops, apply_sheet_ops, apply_slide_ops, create_session, get_app_info,
+insert_content, open_in_genoffice, read_deck, read_docx, read_document,
+read_sheet, replace_blocks, save_session
 ```
 
 **不应出现 `create_docx`、`create_pptx`、`create_xlsx`。**
 
 然后到 **设置 → MCP 设置 → 后台生成** 打开开关（服务会自动重启），再跑一次：
 
-**期望（后台生成 = 开）**，20 个工具：上面 17 个 + `create_docx` + `create_pptx` + `create_xlsx`。
+**期望（后台生成 = 开）**，16 个工具：上面 13 个 + `create_docx` + `create_pptx` + `create_xlsx`。
 
 测完可以把开关拨回默认（关），不影响后续章节。
 
@@ -155,7 +154,7 @@ save_document, save_sheet
 
 ```bash
 # 3.1 打开一个空白文档标签页 —— app 应立刻出现一个新标签
-node "$TEMP/mcp-probe.mjs" call create_document '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"docx"}'
 
 # 3.2 写入内容 —— 编辑器里应实时出现标题/正文/列表/表格
 node "$TEMP/mcp-probe.mjs" call insert_content '{"html":"<h1>测试文档</h1><p>第一段内容。</p><ul><li>甲</li><li>乙</li></ul><table><tr><th>列A</th><th>列B</th></tr><tr><td>1</td><td>2</td></tr></table>"}'
@@ -169,21 +168,21 @@ node "$TEMP/mcp-probe.mjs" call read_document '{}'
 
 **期望**：
 
-- 3.1 返回 `{"ok":true,"documentId":<数字>,"message":...}`
+- 3.1 返回 `{"ok":true,"family":"docx","sessionId":<数字>,"message":...}`
 - 3.2 / 3.3 返回 `{"summary":"...","mutated":true}`，界面同步变化（表格可见、标题居中）
 - 3.4 返回 `{"text":"..."}`，含"测试文档"和列表项
 - 会话期间标签页标题为"未命名文档"之类；全程**没有**保存对话框
 
 ```bash
 # 3.5 输出到指定位置
-node "$TEMP/mcp-probe.mjs" call save_document "{\"path\":\"$OUT/visible.docx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/visible.docx\",\"overwrite\":true}"
 
 # 3.6 会话已结束: 再编辑应报错
 node "$TEMP/mcp-probe.mjs" expect-error insert_content '{"html":"<p>迟到内容</p>"}'
 ```
 
 **期望**：3.5 返回 `{"ok":true,"path":"...visible.docx"}`，文件存在（`ls "$OUT"`）；
-3.6 报错且文案含 `create_document`。保存后标签页标题变为 `visible.docx`。
+3.6 报错且文案含 `create_session`。保存后标签页标题变为 `visible.docx`。
 
 ## 4. 后台生成（需要 §2 中把"后台生成"打开）
 
@@ -221,25 +220,25 @@ node "$TEMP/mcp-probe.mjs" call open_in_genoffice "{\"path\":\"$OUT/visible.docx
 node "$TEMP/mcp-probe.mjs" expect-error read_docx '{"path":"D:/nope/none.docx"}'
 # 相对路径
 node "$TEMP/mcp-probe.mjs" expect-error read_docx '{"path":"relative.docx"}'
-# 没有活动文档就编辑 → 必须提示先 create_document
+# 没有活动文档就编辑 → 必须提示先 create_session
 node "$TEMP/mcp-probe.mjs" expect-error insert_content '{"html":"<p>x</p>"}'
 ```
 
-**期望**：三条错误文案分别含 `file not found` / `path must be absolute` / `no document is open`。
+**期望**：三条错误文案分别含 `file not found` / `path must be absolute` / `no session is open`。
 
 ```bash
 # 打开会话后:非法 ops(整批原子拒绝,返回含 usage 提示)
-node "$TEMP/mcp-probe.mjs" call create_document '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"docx"}'
 node "$TEMP/mcp-probe.mjs" expect-error apply_ops '{"ops":[{"op":"NoSuchOp"}]}'
 # dryRun 只校验不修改
 node "$TEMP/mcp-probe.mjs" call apply_ops '{"ops":[{"op":"setHeadingLevel","target":{"blockIndexes":[0]},"level":2}],"dryRun":true}'
 node "$TEMP/mcp-probe.mjs" call read_document '{}'
 # 结束会话(顺带验证 dryRun 没有破坏文档)
-node "$TEMP/mcp-probe.mjs" call save_document "{\"path\":\"$OUT/dry.docx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/dry.docx\",\"overwrite\":true}"
 ```
 
 **期望**：非法 ops 错误含 `unknown op`；dryRun 返回 `plan` 且 `read_document` 显示文档**没有**变化；
-最后的 save_document 正常写出文件。
+最后的 save_session 正常写出文件。
 
 **裸 HTTP 会话防护**（不经探针）：
 
@@ -296,7 +295,7 @@ grep 'serverInfo' /tmp/sse.raw   # 期望出现 "name":"GenOffice"
 | node scripts/mcp-stdio-bridge.js
 ```
 
-**期望**：stdout 收到 2 条 JSON-RPC 响应；id=2 的响应 `result.tools` 含 `create_document` 等工具名。
+**期望**：stdout 收到 2 条 JSON-RPC 响应；id=2 的响应 `result.tools` 含 `create_session` 等工具名。
 （仓库根目录运行；stdin 必须保持打开几秒，否则进程提前退出。）
 
 ## 9. 会话生命周期
@@ -346,7 +345,7 @@ node "$TEMP/mcp-probe.mjs" expect-error create_pptx "{\"title\":\"后台演示\"
 
 ```bash
 # 11.2.1 打开一个空白演示标签页 —— app 应立刻出现一个新标签
-node "$TEMP/mcp-probe.mjs" call create_deck '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"pptx"}'
 
 # 11.2.2 建第 1 页内容 —— 幻灯片上应实时出现文本框
 # offset 单位为 EMU（1 px = 9525 EMU）
@@ -363,7 +362,7 @@ node "$TEMP/mcp-probe.mjs" call read_deck '{}'
 node "$TEMP/mcp-probe.mjs" expect-error apply_slide_ops '{"ops":[{"op":"NoSuchOp"}]}'
 
 # 11.2.6 输出到指定位置（会话结束）
-node "$TEMP/mcp-probe.mjs" call save_deck "{\"path\":\"$OUT/visible.pptx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/visible.pptx\",\"overwrite\":true}"
 
 # 11.2.7 会话已结束: 再编辑应报错
 node "$TEMP/mcp-probe.mjs" expect-error read_deck '{}'
@@ -377,7 +376,7 @@ node "$TEMP/mcp-probe.mjs" expect-error read_deck '{}'
 - 11.2.4 dryRun 返回 `plan`；第二次 `read_deck` 仍是 1 页
 - 11.2.5 报错含 `unknown op`
 - 11.2.6 返回 `{"path":"...visible.pptx"}`，文件存在；保存后标签页标题变为 `visible.pptx`
-- 11.2.7 报错文案含 `create_deck`
+- 11.2.7 报错文案含 `create_session`
 
 ## 12. 表格（xlsx，两个路径）
 
@@ -400,7 +399,7 @@ node "$TEMP/mcp-probe.mjs" expect-error create_xlsx "{\"title\":\"后台表格\"
 ```bash
 # 12.2.1 打开一个空白表格标签页 —— app 应立刻出现一个新标签
 # （与 app 内"新建表格"一致:默认保存目录会先落一个空白 .xlsx 作为底稿）
-node "$TEMP/mcp-probe.mjs" call create_sheet '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"xlsx"}'
 
 # 12.2.2 读工作簿概览 —— 拿到 sheetId
 node "$TEMP/mcp-probe.mjs" call read_sheet '{}'
@@ -419,7 +418,7 @@ node "$TEMP/mcp-probe.mjs" call apply_sheet_ops '{"ops":[{"op":"set_cell","sheet
 node "$TEMP/mcp-probe.mjs" expect-error apply_sheet_ops '{"ops":[{"op":"NoSuchOp"}]}'
 
 # 12.2.7 输出到指定位置（会话结束;走与 Ctrl+S 相同的保存管线）
-node "$TEMP/mcp-probe.mjs" call save_sheet "{\"path\":\"$OUT/visible.xlsx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/visible.xlsx\",\"overwrite\":true}"
 
 # 12.2.8 会话已结束: 再编辑应报错
 node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
@@ -434,7 +433,7 @@ node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
 - 12.2.5 dryRun 返回计划（cellChanges/structuralChanges），`read_sheet` 确认 C1 没有被写入
 - 12.2.6 报错（zod 校验拒绝或 unknown op）
 - 12.2.7 返回 `{"ok":true,"path":"...visible.xlsx"}`，文件存在；保存后标签页标题变为 `visible.xlsx`
-- 12.2.8 报错文案含 `create_sheet`
+- 12.2.8 报错文案含 `create_session`
 - 用 Excel/WPS 打开 `visible.xlsx`：数值正确，B3 是公式 `=SUM(B2:B2)` 且显示计算结果 12
 
 ---
@@ -444,7 +443,7 @@ node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
 | #   | 项目           | 通过条件                                                                                     |
 | --- | -------------- | -------------------------------------------------------------------------------------------- |
 | 1   | 健康检查       | `/health` 返回 ok + 正确端口                                                                 |
-| 2   | 工具列表       | 默认 17 个无 `create_docx`/`create_pptx`/`create_xlsx`；后台开 20 个                         |
+| 2   | 工具列表       | 默认 13 个无 `create_docx`/`create_pptx`/`create_xlsx`；后台开 16 个                         |
 | 3   | 可见会话       | 建空档→写内容→改格式→读回→存盘，界面全程同步、无对话框；保存后文件存在；会话结束后再编辑报错 |
 | 4   | 后台生成       | markdown/blocks 直接落盘、无新标签页；覆盖保护生效                                           |
 | 5   | 读取/打开      | `read_docx` 文本正确（表格除外，已知边界）；`open_in_genoffice` 聚焦标签页                   |

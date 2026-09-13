@@ -46,7 +46,18 @@ transport with the bundled script:
 Tools exposed in phase 1: `create_docx` (markdown or `SaveBlock[]` → a file on
 disk), `read_docx` (visible text), `open_in_genoffice` (focus the file in a
 tab), `get_app_info`. Phase 1.5 adds the visible docs session; phase 2 (M1)
-adds Slides — `create_pptx` plus the visible deck session below.
+adds Slides and (M2) Sheets — each with a headless `create_*` tool plus the
+visible session described below. The create/save lifecycle for all three
+families was later folded into the shared `create_session` / `save_session`
+pair; see the note at the top of the Phase 1.5 section for the current surface.
+
+## Client concurrency
+
+Each connected client session gets its own tool instances (`toolsFactory` in
+`mcp-server.ts`), so the active editing session is per-connection: two clients
+can each hold a different family open without clobbering each other. Within one
+connection there is still a single active session — `create_session` replaces
+the previous one.
 
 ## Phase 1.5: visible editing (external agent drives the UI)
 
@@ -54,14 +65,38 @@ adds Slides — `create_pptx` plus the visible deck session below.
 document the user can _watch_ — the same way the built-in agent works — a
 visible session was added:
 
-| Tool              | Input                                      | Effect                                                         |
-| ----------------- | ------------------------------------------ | -------------------------------------------------------------- |
-| `create_document` | `{}`                                       | opens a new blank docs tab; starts the session                 |
-| `insert_content`  | `{ html, afterBlockIndex? }`               | appends/inserts restricted HTML into that tab                  |
-| `replace_blocks`  | `{ startBlockIndex, endBlockIndex, html }` | replaces a block range                                         |
-| `apply_ops`       | `{ ops, dryRun? }`                         | applies a formatting batch (font, paragraph, heading, …)       |
-| `read_document`   | `{}`                                       | returns the live document's blocks/indexes/text                |
-| `save_document`   | `{ path, overwrite? }`                     | writes the live document to an absolute path, ends the session |
+> **Tool surface merge (later revision).** The per-family `create_*` / `save_*`
+> pairs below were folded into one shared pair, `create_session { family }` and
+> `save_session { path, overwrite? }`, with a single active session at a time
+> (`apps/shell/src/main/mcp/tools/session-tools.ts`). Each family module now
+> exposes a `FamilyDriver` (open + save) instead of its own lifecycle tools, and
+> the default surface dropped from 17 tools to 13. The per-family content tools
+> (`insert_content`, `read_document`, `apply_ops`, …) are unchanged. Where this
+> document says `create_document` / `save_document` / `create_deck` /
+> `save_deck` / `create_sheet` / `save_sheet`, read the merged pair with the
+> matching `family` (`docx` / `pptx` / `xlsx`).
+>
+> **Format registry.** Family ids, labels, saveable extensions and the headless
+> `create_*` output extensions all come from `tools/formats.ts`, which mirrors the
+> shell's open routing (`routeDocumentPath`) and each editor's Save-As dialog.
+> `get_app_info` reports that editor matrix next to the MCP subset, so drift is
+> visible rather than silent, and `save_session` refuses a path whose extension
+> does not match the active family. Adding a family or format is a registry entry
+> plus a driver — nothing else in the MCP layer changes. The registry also records
+> editor capability MCP does not drive yet (the markdown / HTML / PDF editors, and
+> each editor's PDF export), which is where a future family or export tool plugs
+> in. Where the editor can do more than MCP exposes (e.g. Sheets Save-As offers
+> `.xlsm`/`.csv` but the explicit-path save bridge writes `.xlsx` only), the
+> `mcp` block lists the narrower truth.
+
+| Tool             | Input                                      | Effect                                                         |
+| ---------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| `create_session` | `{ family: "docx" }`                       | opens a new blank docs tab; starts the session                 |
+| `insert_content` | `{ html, afterBlockIndex? }`               | appends/inserts restricted HTML into that tab                  |
+| `replace_blocks` | `{ startBlockIndex, endBlockIndex, html }` | replaces a block range                                         |
+| `apply_ops`      | `{ ops, dryRun? }`                         | applies a formatting batch (font, paragraph, heading, …)       |
+| `read_document`  | `{}`                                       | returns the live document's blocks/indexes/text                |
+| `save_session`   | `{ path, overwrite? }`                     | writes the live document to an absolute path, ends the session |
 
 Architecture (mirrors the built-in agent, per the analysis above):
 
@@ -103,10 +138,10 @@ Registered behind the same `background` switch as `create_docx`.
 
 | Tool              | Input                                              | Effect                                                                                                             |
 | ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `create_deck`     | `{}`                                               | opens a new blank slides tab, waits for the renderer's session                                                     |
+| `create_session`  | `{ family: "pptx" }`                               | opens a new blank slides tab, waits for the renderer's session                                                     |
 | `apply_slide_ops` | `{ ops, isolation?, dryRun? }` (≤50, EMU geometry) | applies one transaction via `applySessionTxn` — the exact `slides:apply-txn` code path (history, journal, autofit) |
 | `read_deck`       | `{}`                                               | element inventory of every slide (durable ids, text, EMU geometry)                                                 |
-| `save_deck`       | `{ path, overwrite? }`                             | writes via `saveSessionDeckTo` (recents, tab title, dirty reset), ends the session                                 |
+| `save_session`    | `{ path, overwrite? }`                             | writes via `saveSessionDeckTo` (recents, tab title, dirty reset), ends the session                                 |
 
 `applySessionTxn` is extracted from the `slides:apply-txn` IPC handler
 (`apps/slides/src/main/slides-main.ts`) so the app's AI surface and the MCP
@@ -116,7 +151,7 @@ tab's webContents as `slides:deck-changed` (the shared `scheduleDeckBroadcast`
 no-ops for single-window sessions; the renderer applies the payload
 idempotently, and multi-window sessions keep getting the scheduled broadcast).
 Session lifecycle matches docs: one session at
-a time, `save_deck` ends it, further edits ask for `create_deck`.
+a time, `save_session` ends it, further edits ask for `create_session`.
 
 Covered by `apps/shell/tests/mcp/slides-tools.test.ts` (headless + session
 routing) and `e2e/mcp-visible-deck.spec.ts` (real app: visible slides tab →
@@ -147,10 +182,10 @@ MCP tool → SheetsControl (apps/shell/src/main/mcp/sheets-bridge.ts)
 
 | Tool              | Input                      | Effect                                                                                                                                                            |
 | ----------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `create_sheet`    | `{}`                       | opens a sheets tab on a fresh blank .xlsx (like the app's "new spreadsheet"; the save pipeline needs a real file), waits for the renderer's ready announce        |
+| `create_session`  | `{ family: "xlsx" }`       | opens a sheets tab on a fresh blank .xlsx (like the app's "new spreadsheet"; the save pipeline needs a real file), waits for the renderer's ready announce        |
 | `read_sheet`      | `{ addresses?, sheetId? }` | workbook overview (sheet ids/names/extents) or cell values + formulas                                                                                             |
 | `apply_sheet_ops` | `{ ops, dryRun? }`         | applies the workbook DSL (set_cell/set_formula/fill_range/add_sheet/add_chart/…) as one undo batch via `applyChangePlan`                                          |
-| `save_sheet`      | `{ path, overwrite? }`     | explicit-path save through the regular sidecar pipeline (new `targetPath`/`overwrite` fields on the save request; dialog-free, clobber-guarded), ends the session |
+| `save_session`    | `{ path, overwrite? }`     | explicit-path save through the regular sidecar pipeline (new `targetPath`/`overwrite` fields on the save request; dialog-free, clobber-guarded), ends the session |
 
 Ops address sheets by id (learn it from `read_sheet`), cells by A1. Covering
 tests: `apps/shell/tests/mcp/sheets-tools.test.ts` and

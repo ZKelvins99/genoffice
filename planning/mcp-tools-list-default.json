@@ -1,0 +1,270 @@
+{
+  "tools": [
+    {
+      "name": "create_session",
+      "description": "Open a new empty file in a visible GenOffice tab and start an editing session; family picks the editor: docx (Word document), pptx (presentation), xlsx (spreadsheet). Then add content with that family's tools (docs: insert_content / replace_blocks / apply_ops; slides: apply_slide_ops; sheets: apply_sheet_ops) and finish with save_session. One session is active at a time — a new create_session replaces it. The user watches each step in the app.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": ["docx", "pptx", "xlsx"],
+            "description": "which editor to open"
+          }
+        },
+        "required": ["family"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "save_session",
+      "description": "Save the active session to an absolute path and end it. A path with no extension gets the active family's file format appended (docx: .docx; xlsx: .xlsx; pptx: .pptx); a different extension is refused. Refuses to replace an existing file unless overwrite is true. This is the output step.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "absolute output path for the file"
+          },
+          "overwrite": {
+            "description": "allow replacing an existing file at `path`; default false",
+            "type": "boolean"
+          }
+        },
+        "required": ["path"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "read_docx",
+      "description": "Read a Word .docx file and return its visible text (one paragraph per line).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "absolute path to a .docx file"
+          }
+        },
+        "required": ["path"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "open_in_genoffice",
+      "description": "Open an existing file in the running GenOffice app, focusing its tab.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "absolute path to the file to open"
+          }
+        },
+        "required": ["path"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_app_info",
+      "description": "Report GenOffice version, the default save folder, the document formats this server can generate, and the editor's full open/save/export format matrix per family.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "insert_content",
+      "description": "Insert content into the visible document as HTML (headings, paragraphs, bold/italic, lists, tables, links). Appends at the end unless afterBlockIndex is given.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "restricted HTML fragment to insert"
+          },
+          "afterBlockIndex": {
+            "description": "insert after this block index; default appends at the end",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["html"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "replace_blocks",
+      "description": "Replace a range of blocks in the visible document with new HTML content. Use read_document to learn block indexes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "startBlockIndex": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "first block index to replace (inclusive)"
+          },
+          "endBlockIndex": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "last block index to replace (inclusive)"
+          },
+          "html": {
+            "type": "string",
+            "description": "restricted HTML fragment the range is replaced with"
+          }
+        },
+        "required": ["startBlockIndex", "endBlockIndex", "html"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "apply_ops",
+      "description": "Apply formatting commands to the visible document (font, paragraph format, heading level, find/replace, list/indent, etc.). `ops` is the same batch format the built-in AI editor accepts; the whole batch is atomic. Use read_document for block indexes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ops": {
+            "type": "array",
+            "items": {},
+            "description": "array of op objects"
+          },
+          "dryRun": {
+            "description": "validate and plan the batch without changing the document",
+            "type": "boolean"
+          }
+        },
+        "required": ["ops"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "read_document",
+      "description": "Read the visible document: its blocks with indexes, text and current formatting, so you can target follow-up edits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "read_deck",
+      "description": "Read the visible presentation: every slide with its elements (ids, types, text, geometry) so you can target follow-up edits. Element ids and slide indexes are what apply_slide_ops addresses; geometry is document-space EMU (1 px = 9525 EMU on a standard 16:9 deck).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "apply_slide_ops",
+      "description": "Apply slide editing ops to the visible presentation as one transaction (atomic by default, plan-validated with snapshot rollback; per_op isolation skips failures instead). Ops address {slide, el} and use document-space EMU. Common ops: setText, setFont, setParagraphFormat, addElement (textbox/shapes/lines), addTable, addChart, addBlankSlide, deleteSlide, moveSlide, duplicateSlide, deleteElement, setFill, setStroke, setTransform, setBackground, applyTheme, findReplace, setTableCell, tableStructure, setTransition, setNotes. A failing atomic batch changes nothing — fix the op named in the error and resend the whole batch. Use read_deck for ids and geometry first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ops": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {},
+            "description": "array of op objects (at most 50 per transaction)"
+          },
+          "isolation": {
+            "description": "atomic (default) applies all-or-nothing; per_op applies independently",
+            "type": "string",
+            "enum": ["atomic", "per_op"]
+          },
+          "dryRun": {
+            "description": "validate and plan the batch without changing the deck",
+            "type": "boolean"
+          }
+        },
+        "required": ["ops"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "read_sheet",
+      "description": "Read the visible workbook: sheet names/ids with data extents, and optionally the current values/formulas of specific cells. Sheet ids and A1 addresses are what apply_sheet_ops targets.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "description": "A1 addresses to read (values + formulas); omit to get the workbook overview only",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sheetId": {
+            "description": "sheet to read from (id from a previous overview); default is the active sheet",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "apply_sheet_ops",
+      "description": "Apply workbook DSL operations to the visible spreadsheet (the same vocabulary the built-in AI uses). Common ops: set_cell, set_formula, clear_cell, set_range, clear_range, fill_range, copy_range, convert_to_values, insert_rows, delete_rows, insert_cols, delete_cols, add_sheet, delete_sheet, add_chart, add_table, set_filter, set_hyperlink, add_conditional_format, set_data_validation, set_note. Addresses are A1 on the target sheet. One batch applies as one undo step; a failed batch changes nothing. Use read_sheet for sheet ids and current values first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ops": {
+            "type": "array",
+            "items": {},
+            "description": "array of workbook DSL op objects"
+          },
+          "dryRun": {
+            "description": "plan the batch and report what would change, without modifying the grid",
+            "type": "boolean"
+          }
+        },
+        "required": ["ops"],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

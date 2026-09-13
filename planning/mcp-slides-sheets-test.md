@@ -3,10 +3,10 @@
 Status: phase-2 专项测试手册。不接任何智能体，全部用 curl / Node 脚本直接打
 `http://127.0.0.1:3093/mcp`，只覆盖本次新增的两个能力：
 
-- **M1 演示（pptx）**：后台 `create_pptx` + 可见演示会话（`create_deck` / `read_deck` /
-  `apply_slide_ops` / `save_deck`）
-- **M2 表格（xlsx）**：后台 `create_xlsx`（纯值版）+ 可见表格会话（`create_sheet` /
-  `read_sheet` / `apply_sheet_ops` / `save_sheet`）
+- **M1 演示（pptx）**：后台 `create_pptx` + 可见演示会话（`create_session family=pptx` / `read_deck` /
+  `apply_slide_ops` / `save_session`）
+- **M2 表格（xlsx）**：后台 `create_xlsx`（纯值版）+ 可见表格会话（`create_session family=xlsx` /
+  `read_sheet` / `apply_sheet_ops` / `save_session`）
 
 phase 1（docx）的完整回归不在本文范围，需要时见 [mcp-test-runbook.md](./mcp-test-runbook.md)。
 计划与实现备注见 [mcp-phase2-plan.md](./mcp-phase2-plan.md)。
@@ -189,10 +189,9 @@ curl -s http://127.0.0.1:${MCP_PORT:-3093}/health
 **期望**：health 返回 ok；工具 **17 个**：
 
 ```
-apply_ops, apply_sheet_ops, apply_slide_ops, create_deck, create_document,
-create_sheet, get_app_info, insert_content, open_in_genoffice, read_deck,
-read_docx, read_document, read_sheet, replace_blocks, save_deck,
-save_document, save_sheet
+apply_ops, apply_sheet_ops, apply_slide_ops, create_session, get_app_info,
+insert_content, open_in_genoffice, read_deck, read_docx, read_document,
+read_sheet, replace_blocks, save_session
 ```
 
 **不应出现** `create_docx` / `create_pptx` / `create_xlsx`（这三个属于"后台生成"，默认关）。
@@ -205,7 +204,7 @@ save_document, save_sheet
 
 ```bash
 # 2.1 打开一个空白演示标签页 —— app 应立刻出现一个新标签（首次可能等 1-3 秒渲染）
-node "$TEMP/mcp-probe.mjs" call create_deck '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"pptx"}'
 
 # 2.2 建第 1 页内容 —— 幻灯片上应**实时**出现标题与两个项目符号
 # offset 单位为 EMU（1 px = 9525 EMU）
@@ -233,7 +232,7 @@ node "$TEMP/mcp-probe.mjs" expect-error apply_slide_ops '{"ops":[{"op":"NoSuchOp
 
 ```bash
 # 2.6 输出到指定位置（会话结束）
-node "$TEMP/mcp-probe.mjs" call save_deck "{\"path\":\"$OUT/visible.pptx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/visible.pptx\",\"overwrite\":true}"
 
 # 2.7 会话已结束：再编辑应报错
 node "$TEMP/mcp-probe.mjs" expect-error read_deck '{}'
@@ -245,7 +244,7 @@ node "$TEMP/mcp-verify.mjs" "$OUT/visible.pptx" "MCP 标题" "第一点" "第二
 **期望**：
 
 - 2.6 返回 `{"path":"...visible.pptx"}`，文件存在；保存后标签页标题变为 `visible.pptx`
-- 2.7 报错文案含 `create_deck`
+- 2.7 报错文案含 `create_session`
 - 2.8 三个关键词全部 PASS；有条件的话用 PowerPoint/WPS 打开看一眼版式（标题 + 两条 • 项目符号）
 
 ---
@@ -255,7 +254,7 @@ node "$TEMP/mcp-verify.mjs" "$OUT/visible.pptx" "MCP 标题" "第一点" "第二
 ```bash
 # 3.1 打开一个空白表格标签页
 # 注意：与 app 内"新建表格"一致，默认保存目录会先落一个"未命名表格N.xlsx"底稿（属预期）
-node "$TEMP/mcp-probe.mjs" call create_sheet '{}'
+node "$TEMP/mcp-probe.mjs" call create_session '{"family":"xlsx"}'
 
 # 3.2 读工作簿概览 —— 拿到 sheetId（apply_sheet_ops 的 ops 必须带它）
 node "$TEMP/mcp-probe.mjs" call read_sheet '{}'
@@ -293,7 +292,7 @@ node "$TEMP/mcp-probe.mjs" expect-error apply_sheet_ops '{"ops":[{"op":"NoSuchOp
 
 ```bash
 # 3.7 输出到指定位置（会话结束；走与 Ctrl+S 相同的保存管线）
-node "$TEMP/mcp-probe.mjs" call save_sheet "{\"path\":\"$OUT/visible.xlsx\",\"overwrite\":true}"
+node "$TEMP/mcp-probe.mjs" call save_session "{\"path\":\"$OUT/visible.xlsx\",\"overwrite\":true}"
 
 # 3.8 会话已结束：再编辑应报错
 node "$TEMP/mcp-probe.mjs" expect-error read_sheet '{"addresses":["A1"]}'
@@ -305,7 +304,7 @@ node "$TEMP/mcp-verify.mjs" "$OUT/visible.xlsx" "品名" "零件" "<f>SUM(B2:B2)
 **期望**：
 
 - 3.7 返回 `{"ok":true,"path":"...visible.xlsx"}`，文件存在；保存后标签页标题变为 `visible.xlsx`
-- 3.8 报错文案含 `create_sheet`
+- 3.8 报错文案含 `create_session`
 - 3.9 三个关键词全部 PASS；有条件的话用 Excel/WPS 打开——B2 是数字类型（右对齐），
   B3 是公式且显示 12
 
@@ -386,8 +385,8 @@ node "$TEMP/mcp-verify.mjs" "$OUT/bg.xlsx" "品名" "零件" "<c r=\"B2\"><v>12<
 - `create_xlsx` 后台版只写值，不写公式/样式（公式走可见会话）
 - `read_sheet` 对 B3 这类公式单元格，`value` 可能是 `null`（引擎尚未算完的瞬时读取），
   `formula` 字段必须在；保存后的文件里缓存值正确
-- 每类 app 同时只有一个 MCP 可见会话；`save_deck` / `save_sheet` 会结束会话
-- `create_sheet` 会在默认保存目录留下一个"未命名表格N.xlsx"底稿（与 app 内新建表格一致）
+- 每类 app 同时只有一个 MCP 可见会话；`save_session` 会结束会话
+- `create_session family=xlsx` 会在默认保存目录留下一个"未命名表格N.xlsx"底稿（与 app 内新建表格一致）
 
 **测试基础设施**：
 
@@ -405,7 +404,7 @@ node "$TEMP/mcp-verify.mjs" "$OUT/bg.xlsx" "品名" "零件" "<c r=\"B2\"><v>12<
 - 关闭测试产生的所有标签页
 - 删除 `$OUT` 临时目录
 - 删除 `%TEMP%\mcp-probe.mjs`、`%TEMP%\mcp-verify.mjs`
-- 删除默认保存目录里测试留下的"未命名表格N.xlsx"（每个 `create_sheet` 调用一个）
+- 删除默认保存目录里测试留下的"未命名表格N.xlsx"（每个 `create_session family=xlsx` 调用一个）
 - 把"后台生成"开关拨回关（如 §4 后没拨回）
 
 ## 报告格式
