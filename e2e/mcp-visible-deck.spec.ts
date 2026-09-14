@@ -156,7 +156,7 @@ test.describe('MCP visible deck session', () => {
       // the shell UI shows a real slides tab (the visible half of the feature)
       const editorTab = page.locator('.tab-bar .tab-item:not(.tab-home)')
       await expect(editorTab).toHaveCount(1)
-      const editorPage = await waitForPageWithUrl(app, 'slides/out')
+      const editorPage = await waitForPageWithUrl(app, 'genoffice-app://slides')
 
       // the visible tab really renders the deck (slide canvas mounted, blank
       // slide painted). Snapshot every painted canvas: MCP edits live in the

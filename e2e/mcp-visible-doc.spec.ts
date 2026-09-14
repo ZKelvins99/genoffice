@@ -159,7 +159,7 @@ test.describe('MCP visible document session', () => {
       // the shell UI shows a real docs tab (the visible half of the feature)
       const editorTab = page.locator('.tab-bar .tab-item:not(.tab-home)')
       await expect(editorTab).toHaveCount(1)
-      const editorPage = await waitForPageWithUrl(app, 'docs/out')
+      const editorPage = await waitForPageWithUrl(app, 'genoffice-app://docs')
 
       // 2. write content (visible edit), 3. format it
       const inserted = await call('insert_content', {
