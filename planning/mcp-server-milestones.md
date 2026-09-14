@@ -134,11 +134,7 @@ Goal: a localhost-only MCP server that speaks Streamable HTTP and legacy SSE.
 
 Goal: the phase-1 tool surface, wired to M1.
 
-- [x] **3.1** `apps/shell/src/main/mcp/tools/document-tools.ts` — register:
-      - `create_docx` `{ title, content, format?: 'markdown'|'blocks', path? }` → `{ path }`
-      - `read_docx` `{ path }` → `{ text }`
-      - `get_app_info` `{}` → `{ version, defaultSaveDir, formats }`
-      - `open_in_genoffice` `{ path }` → `{ ok }` (implemented in M4; declared here)
+- [x] **3.1** `apps/shell/src/main/mcp/tools/document-tools.ts` — register: - `create_docx` `{ title, content, format?: 'markdown'|'blocks', path? }` → `{ path }` - `read_docx` `{ path }` → `{ text }` - `get_app_info` `{}` → `{ version, defaultSaveDir, formats }` - `open_in_genoffice` `{ path }` → `{ ok }` (implemented in M4; declared here)
 - [x] **3.2** Schemas declared as raw shape (SDK requirement), matching the
       `McpTool { name, description, schema, handler }` convention from Tabby-MCP
       `src/types/types.ts`.
@@ -279,11 +275,11 @@ bump in that file (left untouched to keep this change scoped).
 
 Newest last. One line per completed step, with the verification evidence.
 
-| Date | Step | Evidence |
-| --- | --- | --- |
-| 2026-09-11 | M0 (0.1–0.4) | spike test green under Node 22 (`tests/mcp/generation-spike.test.ts`, 2 tests); headless recipe verified |
-| 2026-09-11 | M1 (1.1–1.5) | `tests/mcp/doc-generation.test.ts` 11 tests green; `tsc --noEmit` clean; full shell suite 239 passed |
-| 2026-09-11 | M2 (2.1–2.6) | `tests/mcp/mcp-server.test.ts` 8 tests green incl. legacy SSE (SDK client round-trip); plain `node:http`, no express |
-| 2026-09-11 | M3 (3.1–3.4) | `tests/mcp/document-tools.test.ts` 12 tests green |
-| 2026-09-11 | M4 (4.1–4.4) | lifecycle + settings + `open_in_genoffice` wired in shell `index.ts`; build + 258 suite tests green; SDK-inlining fix; 4.5 deferred to human |
-| 2026-09-11 | M5 (5.1, 5.3, 5.4) | `tests/mcp/stdio-bridge.test.ts` green (real script ↔ live server); docs updated; 34 MCP tests total; packaged launch deferred to human |
+| Date       | Step               | Evidence                                                                                                                                     |
+| ---------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-11 | M0 (0.1–0.4)       | spike test green under Node 22 (`tests/mcp/generation-spike.test.ts`, 2 tests); headless recipe verified                                     |
+| 2026-09-11 | M1 (1.1–1.5)       | `tests/mcp/doc-generation.test.ts` 11 tests green; `tsc --noEmit` clean; full shell suite 239 passed                                         |
+| 2026-09-11 | M2 (2.1–2.6)       | `tests/mcp/mcp-server.test.ts` 8 tests green incl. legacy SSE (SDK client round-trip); plain `node:http`, no express                         |
+| 2026-09-11 | M3 (3.1–3.4)       | `tests/mcp/document-tools.test.ts` 12 tests green                                                                                            |
+| 2026-09-11 | M4 (4.1–4.4)       | lifecycle + settings + `open_in_genoffice` wired in shell `index.ts`; build + 258 suite tests green; SDK-inlining fix; 4.5 deferred to human |
+| 2026-09-11 | M5 (5.1, 5.3, 5.4) | `tests/mcp/stdio-bridge.test.ts` green (real script ↔ live server); docs updated; 34 MCP tests total; packaged launch deferred to human      |

@@ -1720,7 +1720,12 @@ function parseSaveRequest(input: WorkbookSaveRequest): WorkbookSaveRequest {
   if (input.mode !== 'save' && input.mode !== 'save-as') invalid('mode')
   if (input.restoreWriteBack !== undefined && typeof input.restoreWriteBack !== 'boolean')
     invalid('restore flag')
-  if (input.targetPath !== undefined && (typeof input.targetPath !== 'string' || input.targetPath.length === 0 || input.targetPath.length > 1024))
+  if (
+    input.targetPath !== undefined &&
+    (typeof input.targetPath !== 'string' ||
+      input.targetPath.length === 0 ||
+      input.targetPath.length > 1024)
+  )
     invalid('target path')
   if (input.overwrite !== undefined && typeof input.overwrite !== 'boolean')
     invalid('overwrite flag')

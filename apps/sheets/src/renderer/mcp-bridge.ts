@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import type { McpCommandMessage } from '../shared/desktop-api'
-import { workbookOperationSchema, type WorkbookOperation } from '@genoffice/xlsx-gateway/domain/workbook-dsl'
+import {
+  workbookOperationSchema,
+  type WorkbookOperation,
+} from '@genoffice/xlsx-gateway/domain/workbook-dsl'
 
 /**
  * Renderer half of the MCP → sheets-grid bridge.

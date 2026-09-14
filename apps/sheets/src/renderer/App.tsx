@@ -4052,8 +4052,7 @@ export function App(): React.JSX.Element {
       }
       return runUiOps(ops)
     },
-    saveTo: async (path, overwrite) =>
-      handleSave('save-as', true, { path, overwrite }),
+    saveTo: async (path, overwrite) => handleSave('save-as', true, { path, overwrite }),
   }
   useEffect(() => {
     const handlers = mcpSheetHandlersRef
