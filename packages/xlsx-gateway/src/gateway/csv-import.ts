@@ -261,6 +261,14 @@ export async function sheetCsvToXlsxBuffer(csvText: string, sheetName = 'Sheet1'
   return xlsxBufferFromRows(parseCsv(csvText, ','), sheetName)
 }
 
+/** xlsx straight from a row matrix (MCP create_xlsx): no CSV round-trip, cell text may hold any character. */
+export async function rowsToXlsxBuffer(
+  rows: readonly (readonly string[])[],
+  sheetName = 'Sheet1',
+): Promise<Buffer> {
+  return xlsxBufferFromRows(rows, sheetName)
+}
+
 /** minimal empty workbook: the backing file for a "new blank spreadsheet" tab */
 export async function blankXlsxBuffer(sheetName = 'Sheet1'): Promise<Buffer> {
   return xlsxBufferFromRows([], sheetName)
