@@ -19,6 +19,7 @@ import {
 import type { DocsControl } from '../../src/main/mcp/tools/document-tools'
 import type { SlidesControl } from '../../src/main/mcp/tools/slides-tools'
 import type { SheetsControl } from '../../src/main/mcp/tools/sheets-tools'
+import { realCliRunner } from './real-cli'
 
 /**
  * Full-surface MCP acceptance test over the REAL Streamable HTTP transport.
@@ -211,6 +212,7 @@ beforeAll(async () => {
     docsControl: docs.control,
     slidesControl: slides.control,
     sheetsControl: sheets.control,
+    cliRunner: realCliRunner(workDir),
     logFilePath: logPath,
   })
   await applyMcpSettings({ enabled: true, port, background: false, logging: true })
@@ -429,7 +431,7 @@ describe('MCP surface over Streamable HTTP (/mcp)', () => {
         path: pptxPath,
       })
       expect(madeDeck.isError).toBe(false)
-      expect((madeDeck.json as { slides: number }).slides).toBe(2)
+      expect((madeDeck.json as { path: string }).path).toBe(pptxPath)
       const opened = await openPptx(new Uint8Array(await readFile(pptxPath)))
       expect(opened.deck.slides).toHaveLength(2)
 

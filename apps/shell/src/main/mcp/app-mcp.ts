@@ -1,5 +1,6 @@
 import { McpServerService, DEFAULT_MCP_PORT, type McpToolDefinition } from './mcp-server'
 import { McpLogger } from './mcp-logger'
+import type { CliRunner } from './cli-runner'
 import { createDocumentTools, documentDriver, type DocsControl } from './tools/document-tools'
 import { createPdfTools } from './tools/pdf-tools'
 import { createSlidesTools, slidesDriver, type SlidesControl } from './tools/slides-tools'
@@ -28,6 +29,8 @@ export interface McpRuntimeDeps {
   slidesControl?: SlidesControl
   /** drive a visible sheets grid (renderer workbook session); absent in headless runs */
   sheetsControl?: SheetsControl
+  /** the bundled genoffice CLI, backing the headless create/read tools; absent when unavailable */
+  cliRunner?: CliRunner
   /** where the MCP log file lives (userData); logging is unavailable without it */
   logFilePath?: string
 }
@@ -109,6 +112,7 @@ function buildTools(): McpToolDefinition[] {
     ...(deps.slidesControl ? [slidesDriver(deps.slidesControl)] : []),
     ...(deps.sheetsControl ? [sheetsDriver(deps.sheetsControl)] : []),
   ]
+  const cli = deps.cliRunner
   return [
     // the session entry point first: an agent picking a tool sees create_session
     ...createSessionTools(drivers, host),
@@ -127,6 +131,7 @@ function buildTools(): McpToolDefinition[] {
         },
         docs: deps.docsControl,
         extraFormats,
+        ...(cli ? { cli } : {}),
       },
       host,
     ),
@@ -135,6 +140,7 @@ function buildTools(): McpToolDefinition[] {
         defaultSaveDir: deps.defaultSaveDir,
         background: currentSettings.background,
         slides: deps.slidesControl,
+        ...(cli ? { cli } : {}),
       },
       host,
     ),
@@ -143,6 +149,7 @@ function buildTools(): McpToolDefinition[] {
         defaultSaveDir: deps.defaultSaveDir,
         background: currentSettings.background,
         sheets: deps.sheetsControl,
+        ...(cli ? { cli } : {}),
       },
       host,
     ),

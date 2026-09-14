@@ -3,10 +3,11 @@ import type { Op } from '@genoffice/pptx-ops'
 /**
  * Headless pptx generation for the MCP server: outline -> op sequence.
  *
- * Pure functions over data — no DOM, no Electron, no filesystem. The ops feed
- * the slides ops executor (`runTxn`) against a blank deck, exactly the pipeline
- * the slides app's own editing and AI surfaces go through, so generated decks
- * behave like hand-edited ones (undoable, validatable, saved by the engine).
+ * Pure functions over data — no DOM, no Electron, no filesystem. The ops use
+ * the canonical `@genoffice/pptx-ops` vocabulary and are handed to the
+ * `genoffice` CLI (`create --type pptx --ops`), which builds and saves the deck
+ * through the same engine the app uses — so this module carries only the
+ * ergonomic outline→ops adapter, not any deck-building code.
  *
  * Outline convention (markdown):
  *   `# Title`   starts a new slide (the text after `#` is its title)
@@ -139,14 +140,15 @@ function parseMarkdownOutline(raw: string): OutlineSlide[] {
 }
 
 /**
- * Map parsed slides to transaction batches for `runTxn` over a blank deck.
+ * Map parsed slides to one flat op sequence.
  *
- * The executor plans a transaction against the PRE-transaction state, so ops in
- * one batch cannot target slides a previous op in the same batch creates
- * ("insert first, style in the next call"). The deck therefore comes out as two
- * batches: first create every page (chained addBlankSlide), then fill them all.
+ * The CLI applies ops one by one to a blank one-slide deck, and later ops can
+ * target slides earlier ops added, so a single array is enough: create the extra
+ * pages first, then fill every page. (This used to be two `runTxn` batches here
+ * because a single transaction plans against pre-transaction state — the CLI's
+ * per-op application removes that constraint.)
  */
-export function outlineToTxns(slides: OutlineSlide[]): Op[][] {
+export function outlineToOps(slides: OutlineSlide[]): Op[] {
   if (slides.length === 0) {
     throw new Error('outline produced no slides — add at least one "# Slide title" (or JSON entry)')
   }
@@ -180,10 +182,7 @@ export function outlineToTxns(slides: OutlineSlide[]): Op[][] {
       })
     }
   })
-  const txns: Op[][] = []
-  if (createPages.length) txns.push(createPages)
-  if (fillPages.length) txns.push(fillPages)
-  return txns
+  return [...createPages, ...fillPages]
 }
 
 function bodyParagraph(p: OutlineParagraph): Record<string, unknown> {

@@ -1,24 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { openPptx } from '@genoffice/pptx-engine'
 import { McpServerService } from '../../src/main/mcp/mcp-server'
-import { outlineToTxns, parsePptxOutline } from '../../src/main/mcp/pptx-outline'
+import { outlineToOps, parsePptxOutline } from '../../src/main/mcp/pptx-outline'
 import {
   createSlidesTools,
   slidesDriver,
   type SlidesControl,
 } from '../../src/main/mcp/tools/slides-tools'
 import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
+import { fakeCli } from './fake-cli'
 
 /**
  * Slides tool surface over a real MCP session: headless create_pptx (markdown
- * and JSON outlines, path policy, background gating) and the visible deck
- * session tools driven through a fake SlidesControl.
+ * and JSON outlines, path policy, background gating, CLI delegation) and the
+ * visible deck session tools driven through a fake SlidesControl.
  */
 
 let service: McpServerService | undefined
@@ -117,61 +117,57 @@ describe('pptx outline mapping', () => {
   it('rejects malformed JSON and empty outlines', () => {
     expect(() => parsePptxOutline('json', '{nope')).toThrow(/valid JSON/)
     expect(() => parsePptxOutline('json', JSON.stringify({ slides: 3 }))).toThrow(/slides/)
-    expect(() => outlineToTxns(parsePptxOutline('markdown', '   \n  \n'))).toThrow(/no slides/)
-    expect(() => outlineToTxns([])).toThrow(/no slides/)
+    expect(() => outlineToOps(parsePptxOutline('markdown', '   \n  \n'))).toThrow(/no slides/)
+    expect(() => outlineToOps([])).toThrow(/no slides/)
     // a heading-less outline still yields one slide from its body lines
     const slides = parsePptxOutline('markdown', 'just some words')
     expect(slides).toEqual([{ paragraphs: [{ text: 'just some words' }] }])
   })
 
-  it('builds two transaction batches: create every page, then fill them', () => {
-    const txns = outlineToTxns(parsePptxOutline('markdown', '# A\n- x\n\n# B\n- y\n\n# C'))
-    expect(txns).toHaveLength(2)
-    const [create, fill] = txns as [
-      Array<{ op: string; target?: { slide: number } }>,
-      Array<{ op: string; target?: { slide: number } }>,
-    ]
-    expect(create.map((o) => `${o.op}@${o.target?.slide}`)).toEqual([
-      'addBlankSlide@0',
-      'addBlankSlide@1',
-    ])
-    const adds = fill.filter((o) => o.op === 'addElement')
+  it('maps an outline to one flat op array: create every page, then fill them', () => {
+    const ops = outlineToOps(parsePptxOutline('markdown', '# A\n- x\n\n# B\n- y\n\n# C'))
+    const slidesOf = (op: { op: string; target?: { slide: number } }): string =>
+      `${op.op}@${op.target?.slide}`
+    // pages are created before any fill op, so the CLI's per-op application can
+    // target a page a previous op added
+    expect(ops.slice(0, 2).map(slidesOf)).toEqual(['addBlankSlide@0', 'addBlankSlide@1'])
+    const adds = ops.filter((o) => o.op === 'addElement')
     // A: title+body, B: title+body, C: title only
     expect(adds).toHaveLength(5)
-    // every fill op targets a slide the first batch has already created
-    for (const op of fill) {
-      expect(op.target?.slide ?? 0).toBeLessThan(3)
-    }
+    for (const op of adds) expect(op.target?.slide ?? 0).toBeLessThan(3)
   })
 })
 
 describe('headless create_pptx', () => {
-  it('writes a reparsable deck into the default dir', async () => {
-    await startService(createSlidesTools(baseDeps(), createSessionHost()))
+  it('delegates to the CLI with the mapped ops and reports its output', async () => {
+    const cli = fakeCli()
+    await startService(createSlidesTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     const result = await client!.callTool({
       name: 'create_pptx',
       arguments: { title: 'Deck Plan', outline: '# Intro\n- point one\n- point two\n\n# Next' },
     })
     expect(result.isError).toBeFalsy()
-    const payload = JSON.parse(text(result.content)) as { path: string; slides: number }
+    const payload = JSON.parse(text(result.content)) as { path: string }
     expect(existsSync(payload.path)).toBe(true)
     expect(payload.path.startsWith(dir)).toBe(true)
     expect(payload.path.endsWith('.pptx')).toBe(true)
-    expect(payload.slides).toBe(2)
 
-    const opened = await openPptx(new Uint8Array(await readFile(payload.path)))
-    expect(opened.deck.slides).toHaveLength(2)
-    const texts = opened.deck.slides[0]!.elements.flatMap((el) =>
-      el.type === 'text' || el.type === 'shape'
-        ? [(el.text?.paragraphs ?? []).map((p) => p.runs.map((r) => r.text).join('')).join('\n')]
-        : [],
-    )
-    expect(texts.some((t) => t.includes('Intro'))).toBe(true)
-    expect(texts.some((t) => t.includes('point one'))).toBe(true)
+    // `create --type pptx --ops <staged file> --out <path>`
+    const args = cli.last()
+    expect(args.slice(0, 4)).toEqual(['create', '--type', 'pptx', '--ops'])
+    expect(args).toContain('--out')
+    const ops = JSON.parse(cli.lastOps() ?? '[]') as Array<{
+      op: string
+      paragraphs?: Array<{ runs: Array<{ text: string }> }>
+    }>
+    const texts = ops.flatMap((o) => (o.paragraphs ?? []).flatMap((p) => p.runs.map((r) => r.text)))
+    expect(texts).toContain('Intro')
+    expect(texts).toContain('point one')
   })
 
   it('accepts a JSON outline and appends the extension to extensionless paths', async () => {
-    await startService(createSlidesTools(baseDeps(), createSessionHost()))
+    const cli = fakeCli()
+    await startService(createSlidesTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     const result = await client!.callTool({
       name: 'create_pptx',
       arguments: {
@@ -186,12 +182,12 @@ describe('headless create_pptx', () => {
     expect(result.isError).toBeFalsy()
     const payload = JSON.parse(text(result.content)) as { path: string }
     expect(payload.path).toBe(join(dir, 'json-deck.pptx'))
-    const opened = await openPptx(new Uint8Array(await readFile(payload.path)))
-    expect(opened.deck.slides).toHaveLength(1)
+    expect(cli.last()).toContain(join(dir, 'json-deck.pptx'))
   })
 
   it('enforces the shared path policy: absolute paths, clobber guard', async () => {
-    await startService(createSlidesTools(baseDeps(), createSessionHost()))
+    const cli = fakeCli()
+    await startService(createSlidesTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     const absolute = await client!.callTool({
       name: 'create_pptx',
       arguments: { title: 'X', outline: '# A', path: 'relative.pptx' },
@@ -216,12 +212,18 @@ describe('headless create_pptx', () => {
       arguments: { title: 'Taken', outline: '# A', path: target, overwrite: true },
     })
     expect(third.isError).toBeFalsy()
+    // overwrite maps to the CLI's --force
+    expect(cli.last()).toContain('--force')
   })
 
   it('is hidden when background is off, present when on (session tools unaffected)', async () => {
     const fake = fakeSlidesControl()
+    const cli = fakeCli()
     await startService(
-      createSlidesTools({ ...baseDeps(false), slides: fake.control }, createSessionHost()),
+      createSlidesTools(
+        { ...baseDeps(false), slides: fake.control, cli: cli.runner },
+        createSessionHost(),
+      ),
     )
     let names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).not.toContain('create_pptx')
@@ -231,7 +233,10 @@ describe('headless create_pptx', () => {
     await service!.stop()
     service = undefined
     await startService(
-      createSlidesTools({ ...baseDeps(true), slides: fake.control }, createSessionHost()),
+      createSlidesTools(
+        { ...baseDeps(true), slides: fake.control, cli: cli.runner },
+        createSessionHost(),
+      ),
     )
     names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).toContain('create_pptx')

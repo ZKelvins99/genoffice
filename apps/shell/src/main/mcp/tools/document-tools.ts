@@ -1,20 +1,21 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join } from 'node:path'
 import { z } from 'zod'
-import { atomicWriteFile } from '../../../../../docs/src/main/atomic-write'
-import { createDocxBytes, readDocxText, type DocxSourceFormat } from '../doc-generation'
+import { createFileViaCli, readDocxTextViaCli } from '../headless-cli'
 import type { McpToolDefinition } from '../mcp-server'
 import { capabilityReport, generateExtension } from './formats'
 import type { FamilyDriver, SessionHost } from './session-tools'
+import type { CliRunner } from '../cli-runner'
 
 /**
- * Phase-1 MCP tool surface: docx generation and reading.
+ * Docx MCP tool surface.
  *
- * The tool layer owns path policy and disk I/O; generation itself lives in
- * doc-generation.ts. Dependencies are injected so this module stays free of
- * Electron and is unit-testable in a plain Node environment (M4 wires the real
- * default save dir and the "open in a tab" action).
+ * Headless generation/reading (create_docx, read_docx) delegates to the
+ * bundled `genoffice` CLI — the same engines the app ships — instead of
+ * reimplementing conversion here (see ../headless-cli.ts, ../cli-runner.ts).
+ * The visible document session is the part the CLI cannot do: driving the
+ * editor tab the user has open. Dependencies are injected so this module stays
+ * free of Electron and is unit-testable in a plain Node environment.
  */
 
 export interface DocToolDeps {
@@ -30,6 +31,8 @@ export interface DocToolDeps {
   docs?: DocsControl
   /** extra formats other tool families can generate (reported by get_app_info) */
   extraFormats?: string[]
+  /** the bundled genoffice CLI, used by the headless tools */
+  cli?: CliRunner
 }
 
 /** editor commands the docs renderer bridge understands (see docs shared/ipc.ts) */
@@ -118,26 +121,19 @@ export function resolveTargetPath(
   })
 }
 
-/** the phase-1 headless tool: markdown/blocks -> docx bytes written straight to disk */
+/** the headless tool: markdown/restricted-HTML -> docx, delegated to the bundled CLI */
 function createHeadlessDocxTool(deps: DocToolDeps): McpToolDefinition {
   return {
     name: 'create_docx',
     description:
       'Create a Word .docx file from content and save it to disk without opening the app UI. ' +
-      'By default `content` is Markdown (headings, lists, bold/italic, links, code blocks, tables) and is ' +
-      'converted by GenOffice\'s own docx engine. Use format:"blocks" to pass docx-engine SaveBlock ' +
-      'objects instead. Returns the absolute path of the written file.',
+      'Content is Markdown (headings, lists, bold/italic, links, code blocks, tables) or a ' +
+      'restricted-HTML fragment (format:"html"), converted by the same docx engine the app and ' +
+      'the genoffice CLI use. Returns the absolute path of the written file.',
     inputSchema: {
       title: z.string().describe('document title, used as the file name'),
-      content: z
-        .string()
-        .describe(
-          'Markdown source (default) or a JSON string of SaveBlock[] when format is "blocks"',
-        ),
-      format: z
-        .enum(['markdown', 'blocks'])
-        .optional()
-        .describe('content format; default markdown'),
+      content: z.string().describe('Markdown source (default) or a restricted-HTML fragment'),
+      format: z.enum(['markdown', 'html']).optional().describe('content format; default markdown'),
       path: z
         .string()
         .optional()
@@ -150,33 +146,25 @@ function createHeadlessDocxTool(deps: DocToolDeps): McpToolDefinition {
     handler: async (args) => {
       const title = String(args.title ?? '').trim()
       if (!title) throw new Error('title must not be empty')
+      if (!deps.cli) throw new Error('headless generation is not available in this build')
 
-      const format: DocxSourceFormat = args.format === 'blocks' ? 'blocks' : 'markdown'
-      let content: string | unknown[]
-      if (format === 'blocks') {
-        try {
-          const parsed = typeof args.content === 'string' ? JSON.parse(args.content) : args.content
-          if (!Array.isArray(parsed)) throw new Error('blocks content must be an array')
-          content = parsed
-        } catch (error) {
-          throw new Error(
-            `format "blocks" requires content to be a JSON array: ${error instanceof Error ? error.message : String(error)}`,
-            { cause: error },
-          )
-        }
-      } else {
-        content = String(args.content ?? '')
-      }
-
+      const format = args.format === 'html' ? 'html' : 'markdown'
       const targetPath = resolveTargetPath(
         deps,
         title,
         typeof args.path === 'string' ? args.path : undefined,
         args.overwrite === true,
       )
-      const bytes = await createDocxBytes({ format, content: content as string })
-      await atomicWriteFile(targetPath, Buffer.from(bytes))
-      return { path: targetPath, bytes: bytes.byteLength }
+      const { summary, outputPath } = await createFileViaCli(deps.cli, {
+        type: 'docx',
+        input: {
+          name: `content.${format === 'html' ? 'html' : 'md'}`,
+          content: String(args.content ?? ''),
+        },
+        out: targetPath,
+        overwrite: args.overwrite === true,
+      })
+      return { path: outputPath, summary }
     },
   }
 }
@@ -198,7 +186,8 @@ export function createDocumentTools(deps: DocToolDeps, host: SessionHost): McpTo
         if (extname(filePath).toLowerCase() !== DOCX_EXT)
           throw new Error('path must point to a .docx file')
         if (!existsSync(filePath)) throw new Error(`file not found: ${filePath}`)
-        const text = await readDocxText(new Uint8Array(await readFile(filePath)))
+        if (!deps.cli) throw new Error('reading .docx is not available in this build')
+        const text = await readDocxTextViaCli(deps.cli, filePath)
         return { path: filePath, name: basename(filePath), text }
       },
     },

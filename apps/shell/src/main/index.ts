@@ -143,6 +143,7 @@ import {
   stopMcpSync,
   type McpSettings,
 } from './mcp/app-mcp'
+import { createCliRunner } from './mcp/cli-runner'
 import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
 import { createDocsControl, installDocsBridge } from './mcp/docs-bridge'
 import { createSlidesControl } from './mcp/slides-bridge'
@@ -4606,6 +4607,15 @@ app.whenReady().then(async () => {
     docsControl: createDocsControl({ openBlankTab: () => openBlankDocsTabForMcp() }),
     slidesControl: createSlidesControl({ openBlankTab: () => openBlankSlidesTabForMcp() }),
     sheetsControl: createSheetsControl({ openBlankTab: () => openBlankSheetsTabForMcp() }),
+    // the headless create_*/read_* tools delegate to the bundled genoffice CLI
+    // (the same engines, no second implementation); it runs on the app's own
+    // Node runtime via ELECTRON_RUN_AS_NODE
+    cliRunner: createCliRunner({
+      executable: process.execPath,
+      entry: app.isPackaged
+        ? join(process.resourcesPath, 'cli', 'genoffice.cjs')
+        : join(APPS_ROOT, '..', 'packages', 'cli', 'dist', 'genoffice.cjs'),
+    }),
     logFilePath: join(app.getPath('userData'), 'mcp-log.txt'),
   })
   void startMcpFromSettings(currentMcpSettings()).catch((error) => {

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { parseDocx } from '@genoffice/docx-engine'
 import { McpServerService } from '../../src/main/mcp/mcp-server'
 import {
   createDocumentTools,
@@ -14,16 +14,20 @@ import {
   sanitizeFileBase,
 } from '../../src/main/mcp/tools/document-tools'
 import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
+import { fakeCli } from './fake-cli'
 
 /**
- * M3: the docx tool surface over a real MCP session. Files are written to a
- * temp dir that stands in for the app default save folder.
+ * The docx tool surface over a real MCP session. Files are written to a temp dir
+ * that stands in for the app default save folder. The headless tools delegate to
+ * the bundled genoffice CLI (a fake here), so these assert the argv/stdin the
+ * tools build — document fidelity is the CLI's own test surface.
  */
 
 let service: McpServerService | undefined
 let dir: string
 let client: Client | undefined
 let opened: string[]
+let cli: ReturnType<typeof fakeCli>
 
 async function freePort(): Promise<number> {
   const { createServer } = await import('node:http')
@@ -41,6 +45,7 @@ async function freePort(): Promise<number> {
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'genoffice-mcp-'))
   opened = []
+  cli = fakeCli()
   const port = await freePort()
   service = new McpServerService({
     port,
@@ -51,6 +56,7 @@ beforeEach(async () => {
         openInTab: (filePath) => {
           opened.push(filePath)
         },
+        cli: cli.runner,
       },
       createSessionHost(),
     ),
@@ -84,7 +90,7 @@ describe('M3 docx tools', () => {
     ])
   })
 
-  it('create_docx writes a reparsable file into the default dir', async () => {
+  it('create_docx delegates to the CLI with the markdown staged on disk', async () => {
     const result = await client!.callTool({
       name: 'create_docx',
       arguments: { title: 'Meeting Notes', content: '# Agenda\n\n- item one\n- item two' },
@@ -94,11 +100,24 @@ describe('M3 docx tools', () => {
     const payload = JSON.parse(text(result.content)) as { path: string }
     expect(existsSync(payload.path)).toBe(true)
     expect(payload.path.startsWith(dir)).toBe(true)
+    expect(payload.path.endsWith('.docx')).toBe(true)
 
-    const parsed = await parseDocx(new Uint8Array(await readFile(payload.path)))
-    const visible = parsed.blocks.filter((b) => !b.hidden)
-    expect(visible[0].type).toBe('heading')
-    expect(visible[1].type).toBe('listItem')
+    // `create --type docx --from <staged .md> --out <path>`
+    const args = cli.last()
+    expect(args.slice(0, 4)).toEqual(['create', '--type', 'docx', '--from'])
+    expect(args[4]!.endsWith('.md')).toBe(true)
+    expect(cli.lastFrom()).toContain('# Agenda')
+  })
+
+  it('create_docx accepts restricted HTML (format:"html")', async () => {
+    const result = await client!.callTool({
+      name: 'create_docx',
+      arguments: { title: 'Web', content: '<h1>Title</h1>', format: 'html' },
+    })
+    expect(result.isError).toBeFalsy()
+    const args = cli.last()
+    expect(args[4]!.endsWith('.html')).toBe(true)
+    expect(cli.lastFrom()).toBe('<h1>Title</h1>')
   })
 
   it('create_docx avoids clobbering an existing file', async () => {
@@ -132,45 +151,34 @@ describe('M3 docx tools', () => {
       arguments: { title: 'x', content: 'hi', path: target, overwrite: true },
     })
     expect(allowed.isError).toBeFalsy()
-    const parsed = await parseDocx(new Uint8Array(await readFile(target)))
-    expect(parsed.blocks.filter((b) => !b.hidden).length).toBeGreaterThan(0)
+    // overwrite maps to the CLI's --force
+    expect(cli.last()).toContain('--force')
   })
 
-  it('create_docx accepts blocks JSON', async () => {
-    const blocks = JSON.stringify([
-      { kind: 'generated', block: { type: 'heading', level: 1, runs: [{ text: 'Blocks title' }] } },
-    ])
+  it('surfaces a CLI failure as a tool error', async () => {
+    cli.failNext('markdown rejected')
     const result = await client!.callTool({
       name: 'create_docx',
-      arguments: { title: 'Blocks', content: blocks, format: 'blocks' },
-    })
-    expect(result.isError).toBeFalsy()
-    const payload = JSON.parse(text(result.content)) as { path: string }
-    const parsed = await parseDocx(new Uint8Array(await readFile(payload.path)))
-    expect(parsed.blocks.filter((b) => !b.hidden)[0].type).toBe('heading')
-  })
-
-  it('create_docx reports malformed blocks JSON as a tool error', async () => {
-    const result = await client!.callTool({
-      name: 'create_docx',
-      arguments: { title: 'Bad', content: '{not json', format: 'blocks' },
+      arguments: { title: 'Bad', content: '# x' },
     })
     expect(result.isError).toBe(true)
-    expect(text(result.content)).toContain('JSON')
+    expect(text(result.content)).toContain('markdown rejected')
   })
 
-  it('read_docx returns the text of a generated file', async () => {
-    const created = await client!.callTool({
-      name: 'create_docx',
-      arguments: { title: 'Readable', content: '# Title\n\nBody text here.' },
+  it('read_docx returns the CLI-read text', async () => {
+    await writeFile(join(dir, 'doc.docx'), 'placeholder')
+    cli.setReadItems([
+      { index: 0, type: 'heading', text: 'Title' },
+      { index: 1, text: 'Body text here.' },
+    ])
+    const result = await client!.callTool({
+      name: 'read_docx',
+      arguments: { path: join(dir, 'doc.docx') },
     })
-    const { path } = JSON.parse(text(created.content)) as { path: string }
-
-    const result = await client!.callTool({ name: 'read_docx', arguments: { path } })
     expect(result.isError).toBeFalsy()
     const payload = JSON.parse(text(result.content)) as { text: string }
-    expect(payload.text).toContain('Title')
-    expect(payload.text).toContain('Body text here.')
+    expect(payload.text).toBe('Title\nBody text here.')
+    expect(cli.last()).toEqual(['docs', 'read', join(dir, 'doc.docx')])
   })
 
   it('read_docx rejects a missing file and a non-docx extension', async () => {
@@ -188,15 +196,13 @@ describe('M3 docx tools', () => {
   })
 
   it('open_in_genoffice calls the injected opener', async () => {
-    const created = await client!.callTool({
-      name: 'create_docx',
-      arguments: { title: 'Open', content: 'x' },
+    await writeFile(join(dir, 'open.docx'), 'placeholder')
+    const result = await client!.callTool({
+      name: 'open_in_genoffice',
+      arguments: { path: join(dir, 'open.docx') },
     })
-    const { path } = JSON.parse(text(created.content)) as { path: string }
-
-    const result = await client!.callTool({ name: 'open_in_genoffice', arguments: { path } })
     expect(result.isError).toBeFalsy()
-    expect(opened).toEqual([path])
+    expect(opened).toEqual([join(dir, 'open.docx')])
   })
 
   it('get_app_info reports version, save dir and formats', async () => {

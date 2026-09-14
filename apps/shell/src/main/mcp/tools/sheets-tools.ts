@@ -1,21 +1,21 @@
-import { statSync } from 'node:fs'
 import { z } from 'zod'
-import { atomicWriteFile } from '../../../../../docs/src/main/atomic-write'
-import { rowsToXlsxBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
+import { createFileViaCli } from '../headless-cli'
 import { resolveOutputPath } from './document-tools'
 import { generateExtension } from './formats'
 import type { FamilyDriver, SessionHost } from './session-tools'
 import type { McpToolDefinition } from '../mcp-server'
+import type { CliRunner } from '../cli-runner'
 
 /**
  * Sheets (xlsx) tool surface for the MCP server.
  *
  * Two paths, mirroring the docx/slides tools:
- * - headless `create_xlsx`: a values-only workbook written straight to disk,
- *   gated behind the "background generation" setting. Values-only matches the
- *   app's own AI create_document writer (`sheetCsvToXlsxBuffer`); formula
- *   fidelity goes through the Rust sidecar and is deliberately not exposed
- *   headlessly yet (tracked as M2.2 in planning/mcp-phase2-plan.md).
+ * - headless `create_xlsx`: a row matrix handed to the bundled `genoffice` CLI
+ *   (`create --type xlsx --from`), gated behind the "background generation"
+ *   setting. The CLI writes through the app's xlsx gateway and evaluates
+ *   formulas with the sidecar, so strings starting with "=" become real formula
+ *   cells with cached values — more than the values-only writer this used to
+ *   carry.
  * - a visible grid session: the tools drive a real sheets tab the user
  *   watches. The workbook lives in the renderer (Univer), so this needs a
  *   request/response bridge into the renderer (`sheets-bridge.ts` here, the
@@ -30,6 +30,8 @@ export interface SheetsToolDeps {
   background?: boolean
   /** visible-grid control; absent in headless/unit runs, which drops the session tools */
   sheets?: SheetsControl
+  /** the bundled genoffice CLI, used by the headless tool */
+  cli?: CliRunner
 }
 
 /**
@@ -50,15 +52,15 @@ export interface SheetsControl {
 
 const XLSX_EXT = `.${generateExtension('xlsx')}`
 
-/** the headless tool: a row matrix -> values-only xlsx written straight to disk */
+/** the headless tool: a row matrix -> xlsx through the bundled CLI */
 function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
   return {
     name: 'create_xlsx',
     description:
-      'Create an Excel .xlsx file (values only) and save it to disk without opening the app UI. ' +
-      '`data` is a 2D array of rows; cells given as numbers become numeric cells, everything else is text. ' +
-      'Formulas are not evaluated headlessly — pass computed values, or use the visible ' +
-      'create_session (family "xlsx") with set_formula ops instead. Returns the absolute path of the written file.',
+      'Create an Excel .xlsx file and save it to disk without opening the app UI. `data` is a 2D ' +
+      'array of rows; numbers become numeric cells, and a string starting with "=" becomes a ' +
+      'formula (the genoffice CLI evaluates it and stores the cached value). Returns the absolute ' +
+      'path of the written file.',
     inputSchema: {
       title: z.string().describe('workbook title, used as the file name'),
       data: z
@@ -81,6 +83,7 @@ function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
       if (args.data.some((row) => !Array.isArray(row))) {
         throw new Error('data must be a 2D array of rows')
       }
+      if (!deps.cli) throw new Error('headless generation is not available in this build')
       const sheetName =
         typeof args.sheetName === 'string' && args.sheetName.trim()
           ? args.sheetName.trim()
@@ -97,19 +100,20 @@ function createHeadlessXlsxTool(deps: SheetsToolDeps): McpToolDefinition {
       const rows = (args.data as unknown[][]).map((row) =>
         row.map((cell) => {
           if (cell === null || cell === undefined) return ''
-          if (typeof cell === 'number') {
-            return Number.isFinite(cell) ? String(cell) : ''
-          }
+          if (typeof cell === 'number') return Number.isFinite(cell) ? cell : ''
           return String(cell)
         }),
       )
-      const buffer = await rowsToXlsxBuffer(rows, sheetName)
-      await atomicWriteFile(targetPath, buffer)
-      return {
-        path: targetPath,
-        cells: rows.reduce((n, row) => n + row.length, 0),
-        bytes: statSync(targetPath).size,
-      }
+      const { summary, outputPath } = await createFileViaCli(deps.cli, {
+        type: 'xlsx',
+        input: {
+          name: 'table.json',
+          content: JSON.stringify({ sheets: [{ name: sheetName, rows }] }),
+        },
+        out: targetPath,
+        overwrite: args.overwrite === true,
+      })
+      return { path: outputPath, summary }
     },
   }
 }

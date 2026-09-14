@@ -1,29 +1,23 @@
-import { statSync } from 'node:fs'
 import { z } from 'zod'
-import { createBlankPptx, openPptx, savePptxToFile } from '@genoffice/pptx-engine'
-// @genoffice/pptx-ops is the canonical op layer (registry + executor); it also
-// registers the whole op vocabulary runTxn validates against
-import { runTxn } from '@genoffice/pptx-ops'
-import { outlineToTxns, parsePptxOutline, type PptxSourceFormat } from '../pptx-outline'
+import { outlineToOps, parsePptxOutline, type PptxSourceFormat } from '../pptx-outline'
+import { createPptxViaCli } from '../headless-cli'
 import { resolveOutputPath } from './document-tools'
 import { generateExtension } from './formats'
 import type { FamilyDriver, SessionHost } from './session-tools'
 import type { McpToolDefinition } from '../mcp-server'
+import type { CliRunner } from '../cli-runner'
 
 /**
  * Slides (pptx) tool surface for the MCP server.
  *
  * Two paths, mirroring the docx tools:
- * - headless `create_pptx`: outline -> ops -> engine bytes on disk, gated behind
- *   the "background generation" setting;
+ * - headless `create_pptx`: outline -> ops, handed to the bundled `genoffice`
+ *   CLI (`create --type pptx --ops`), gated behind the "background generation"
+ *   setting. No deck-building code lives here;
  * - a visible deck session: the tools drive a real slides tab the user watches.
  *   Slides sessions live in the slides main process, so the control talks to
  *   main-process state directly (no renderer bridge) — see
  *   `apps/shell/src/main/mcp/slides-bridge.ts`.
- *
- * This module stays free of Electron: the engine, the ops executor and the
- * outline mapping are plain Node, and the visible path hides behind the
- * injected SlidesControl.
  */
 
 export interface SlidesToolDeps {
@@ -33,6 +27,8 @@ export interface SlidesToolDeps {
   background?: boolean
   /** visible-deck control; absent in headless/unit runs, which drops the session tools */
   slides?: SlidesControl
+  /** the bundled genoffice CLI, used by the headless tool */
+  cli?: CliRunner
 }
 
 /** transaction request for the visible deck (executor semantics, ops are EMU-space) */
@@ -92,9 +88,9 @@ function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
       if (typeof args.outline !== 'string') {
         throw new Error('outline must be a string (markdown by default, JSON with format:"json")')
       }
+      if (!deps.cli) throw new Error('headless generation is not available in this build')
       const format: PptxSourceFormat = args.format === 'json' ? 'json' : 'markdown'
-      const slides = parsePptxOutline(format, args.outline)
-      const txns = outlineToTxns(slides)
+      const ops = outlineToOps(parsePptxOutline(format, args.outline))
 
       const targetPath = resolveOutputPath({
         defaultSaveDir: deps.defaultSaveDir,
@@ -104,20 +100,12 @@ function createHeadlessPptxTool(deps: SlidesToolDeps): McpToolDefinition {
         overwrite: args.overwrite === true,
       })
 
-      const opened = await openPptx(await createBlankPptx())
-      for (const ops of txns) {
-        const result = runTxn(opened, { ops })
-        if (!result.applied) {
-          const first = result.failures?.[0]?.error ?? 'the outline could not be applied'
-          throw new Error(first)
-        }
-      }
-      await savePptxToFile(opened, targetPath)
-      return {
-        path: targetPath,
-        slides: opened.deck.slides.length,
-        bytes: statSync(targetPath).size,
-      }
+      const { summary, outputPath } = await createPptxViaCli(deps.cli, {
+        ops,
+        out: targetPath,
+        overwrite: args.overwrite === true,
+      })
+      return { path: outputPath, summary }
     },
   }
 }

@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import JSZip from 'jszip'
 import { McpServerService } from '../../src/main/mcp/mcp-server'
 import {
   createSheetsTools,
@@ -13,10 +12,11 @@ import {
   type SheetsControl,
 } from '../../src/main/mcp/tools/sheets-tools'
 import { createSessionHost, createSessionTools } from '../../src/main/mcp/tools/session-tools'
+import { fakeCli } from './fake-cli'
 
 /**
  * Sheets tool surface over a real MCP session: headless create_xlsx (row
- * matrix, numeric typing, path policy, background gating) and the visible grid
+ * matrix, path policy, background gating, CLI delegation) and the visible grid
  * session tools driven through a fake SheetsControl.
  */
 
@@ -79,8 +79,9 @@ function text(content: unknown): string {
 }
 
 describe('headless create_xlsx', () => {
-  it('writes a values-only workbook with typed cells', async () => {
-    await startService(createSheetsTools(baseDeps(), createSessionHost()))
+  it('delegates to the CLI with the staged row matrix', async () => {
+    const cli = fakeCli()
+    await startService(createSheetsTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     const result = await client!.callTool({
       name: 'create_xlsx',
       arguments: {
@@ -95,24 +96,26 @@ describe('headless create_xlsx', () => {
       },
     })
     expect(result.isError).toBeFalsy()
-    const payload = JSON.parse(text(result.content)) as { path: string; cells: number }
+    const payload = JSON.parse(text(result.content)) as { path: string }
     expect(existsSync(payload.path)).toBe(true)
     expect(payload.path.endsWith('.xlsx')).toBe(true)
-    expect(payload.cells).toBe(8)
 
-    // unpack: numeric cells carry <v> without inlineStr; text uses inlineStr
-    const zip = await JSZip.loadAsync(await readFile(payload.path))
-    const sheetXml = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
-    const workbookXml = await zip.file('xl/workbook.xml')!.async('string')
-    expect(workbookXml).toContain('Data')
-    expect(sheetXml).toContain('<c r="B2"><v>12</v></c>')
-    expect(sheetXml).toContain('<v>3.5</v>')
-    expect(sheetXml).toContain('Mixed, comma')
-    expect(sheetXml).toContain('Widgets')
+    // `create --type xlsx --from <staged table.json> --out <path>`; the staged
+    // JSON carries the sheet name and rows with numbers kept numeric
+    const args = cli.last()
+    expect(args.slice(0, 4)).toEqual(['create', '--type', 'xlsx', '--from'])
+    expect(args[4]!.endsWith('table.json')).toBe(true)
+    const table = JSON.parse(cli.lastFrom() ?? '{}') as {
+      sheets: Array<{ name: string; rows: unknown[][] }>
+    }
+    expect(table.sheets[0]!.name).toBe('Data')
+    expect(table.sheets[0]!.rows[1]).toEqual(['Widgets', 12])
+    expect(table.sheets[0]!.rows[3]![0]).toBe('Mixed, comma')
   })
 
   it('enforces the shared path policy: absolute paths, extension append, clobber guard', async () => {
-    await startService(createSheetsTools(baseDeps(), createSessionHost()))
+    const cli = fakeCli()
+    await startService(createSheetsTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     const relative = await client!.callTool({
       name: 'create_xlsx',
       arguments: { title: 'X', data: [[1]], path: 'relative.xlsx' },
@@ -138,7 +141,8 @@ describe('headless create_xlsx', () => {
   })
 
   it('rejects malformed data', async () => {
-    await startService(createSheetsTools(baseDeps(), createSessionHost()))
+    const cli = fakeCli()
+    await startService(createSheetsTools({ ...baseDeps(), cli: cli.runner }, createSessionHost()))
     // flat rows fail the input schema before the handler runs
     const flat = await client!.callTool({
       name: 'create_xlsx',
@@ -154,8 +158,12 @@ describe('headless create_xlsx', () => {
 
   it('is hidden when background is off, present when on (session tools unaffected)', async () => {
     const fake = fakeSheetsControl()
+    const cli = fakeCli()
     await startService(
-      createSheetsTools({ ...baseDeps(false), sheets: fake.control }, createSessionHost()),
+      createSheetsTools(
+        { ...baseDeps(false), sheets: fake.control, cli: cli.runner },
+        createSessionHost(),
+      ),
     )
     let names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).not.toContain('create_xlsx')
@@ -165,7 +173,10 @@ describe('headless create_xlsx', () => {
     await service!.stop()
     service = undefined
     await startService(
-      createSheetsTools({ ...baseDeps(true), sheets: fake.control }, createSessionHost()),
+      createSheetsTools(
+        { ...baseDeps(true), sheets: fake.control, cli: cli.runner },
+        createSessionHost(),
+      ),
     )
     names = (await client!.listTools()).tools.map((t) => t.name)
     expect(names).toContain('create_xlsx')
