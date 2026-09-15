@@ -15,7 +15,9 @@ import type { Op } from '@genoffice/pptx-ops'
  *   `- Text`    a bullet (indent with two leading spaces per level)
  *   `1. Text`   a numbered bullet
  *   plain line  a body paragraph without a bullet
- * The JSON format is `{ slides: [{ title, bullets }] }` with the same pieces.
+ * The JSON format is `{ slides: [{ title, bullets }] }` with the same pieces:
+ * `bullets` entries are bullets (a bare string gets a character bullet, and an
+ * entry may name `bullet: "number"`), while `paragraphs` is plain text.
  */
 
 export type PptxSourceFormat = 'markdown' | 'json'
@@ -68,15 +70,16 @@ function parseJsonOutline(raw: string): OutlineSlide[] {
       throw new Error(`slide ${index} must be an object or a string`)
     }
     const obj = entry as { title?: unknown; bullets?: unknown; paragraphs?: unknown }
-    const rawBullets = Array.isArray(obj.bullets)
-      ? obj.bullets
-      : Array.isArray(obj.paragraphs)
-        ? obj.paragraphs
-        : []
+    // A `bullets` array means bullets: a bare string entry defaults to a
+    // character bullet, the same as the markdown `- item` form. `paragraphs` is
+    // the plain-text spelling and keeps no bullet.
+    const isBullets = Array.isArray(obj.bullets)
+    const rawBullets = isBullets ? obj.bullets : Array.isArray(obj.paragraphs) ? obj.paragraphs : []
     return {
       ...(typeof obj.title === 'string' && obj.title.trim() ? { title: obj.title.trim() } : {}),
-      paragraphs: rawBullets.map((b) => {
-        if (typeof b === 'string') return { text: b }
+      paragraphs: (rawBullets as unknown[]).map((b) => {
+        if (typeof b === 'string')
+          return isBullets ? { text: b, bullet: 'char' as const } : { text: b }
         const bl = b as { text?: unknown; level?: unknown; bullet?: unknown; bold?: unknown }
         if (typeof bl?.text !== 'string')
           throw new Error(`slide ${index}: each bullet needs a "text" string`)
@@ -86,7 +89,9 @@ function parseJsonOutline(raw: string): OutlineSlide[] {
             ? { bullet: 'number' as const }
             : bl.bullet === 'char'
               ? { bullet: 'char' as const }
-              : {}),
+              : isBullets
+                ? { bullet: 'char' as const }
+                : {}),
           ...(typeof bl.level === 'number' && Number.isInteger(bl.level) && bl.level > 0
             ? { level: bl.level }
             : {}),

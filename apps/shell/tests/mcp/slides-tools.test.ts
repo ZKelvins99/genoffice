@@ -108,10 +108,29 @@ describe('pptx outline mapping', () => {
     )
     expect(slides[0]).toEqual({ paragraphs: [{ text: 'Just a body' }] })
     expect(slides[1]!.title).toBe('T')
+    // entries under `bullets` are bullets: a bare string defaults to a character
+    // bullet, and an explicit `bullet` is honored
     expect(slides[1]!.paragraphs).toEqual([
-      { text: 'a' },
+      { text: 'a', bullet: 'char' },
       { text: 'b', bullet: 'number', level: 2 },
     ])
+  })
+
+  it('keeps `paragraphs` as plain text while `bullets` renders bullets', () => {
+    const slides = parsePptxOutline(
+      'json',
+      JSON.stringify({
+        slides: [
+          { title: 'A', bullets: ['b1', { text: 'b2', bullet: 'char' }] },
+          { title: 'B', paragraphs: ['p1', { text: 'p2' }] },
+        ],
+      }),
+    )
+    expect(slides[0]!.paragraphs).toEqual([
+      { text: 'b1', bullet: 'char' },
+      { text: 'b2', bullet: 'char' },
+    ])
+    expect(slides[1]!.paragraphs).toEqual([{ text: 'p1' }, { text: 'p2' }])
   })
 
   it('rejects malformed JSON and empty outlines', () => {
