@@ -423,8 +423,14 @@ function syncAttachedPaths(session: Session, path: string): void {
  * effects: session path, recents, attached-surface titles, dirty-flag reset.
  */
 export async function saveSessionDeckTo(session: Session, filePath: string): Promise<void> {
+  // the caller supplies an arbitrary absolute path, so its parent may not exist
+  // yet (the dialog-driven paths always land in an existing folder)
+  await mkdir(dirname(filePath), { recursive: true })
   await savePptxToFile(session.opened, filePath)
   session.path = filePath
+  autosaveBackoff.delete(filePath)
+  // mirror slides:save-as: a saved deck is no longer an unsaved untitled draft
+  for (const id of attachedIds(session)) dropUntitledRecovery(id)
   await pushRecent(filePath)
   syncAttachedPaths(session, filePath)
   commitSaved(session.opened)
@@ -946,6 +952,11 @@ export function applySessionTxn(session: Session, req: ApplyTxnOp): ApplyTxnResu
     session.undoStack.pop()
     return { applied: false, failures: compact(r.failures) }
   }
+  // Some ops change only package state (setNotes, a theme commit) and leave no
+  // element dirty, so without this the session would still look clean and a
+  // close could discard the edit. Element-level ops set their own flags; this
+  // covers the archive-only ones.
+  session.metaDirty = true
   // Post-pass mirroring the dedicated shims (autofit/reparse are render concerns and live
   // outside the executor): text ops get autofit resize + fontScale write-back, level changes
   // materialize, and XML-patching ops reparse the page so the final render reflects them.

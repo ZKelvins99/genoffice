@@ -193,6 +193,9 @@ test.describe('MCP visible deck session', () => {
       })
       expect(applied.isError, applied.text).toBeFalsy()
       expect(applied.text).toContain('"applied": true')
+      // the render tree (base64 image data) must not come back in the tool
+      // result: only the canvas push needs it
+      expect(applied.text).not.toContain('"slides"')
 
       // …and the canvas actually repaints with it (this is the "watch the deck
       // build live" half of the feature; a swallowed broadcast leaves it blank)

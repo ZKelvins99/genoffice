@@ -19,6 +19,14 @@ import type { SlidesControl, SlidesTxnRequest } from './tools/slides-tools'
 
 const READY_TIMEOUT_MS = 20_000
 const EMU_PER_PX_96 = 9525
+/** per-text cap in read_deck, mirroring the CLI's describeDeck clipping */
+const MAX_TEXT_CHARS = 300
+/** table rows echoed per element (the CLI caps its own table output the same way) */
+const MAX_TABLE_ROWS = 3
+
+function clip(text: string, max = MAX_TEXT_CHARS): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
 
 /** the session a tab's renderer creates on boot; the renderer applies the blank deck right after */
 async function waitSession(wcId: number): Promise<Session> {
@@ -45,7 +53,14 @@ function requireSession(wcId: number): Session {
   return session
 }
 
-/** compact model readout for the agent: ids, geometry (EMU) and text per element */
+/**
+ * Compact model readout for the agent: ids, geometry (EMU) and text per element.
+ *
+ * Group children carry the group's child coordinate system, not document-space
+ * EMU, so their box is reported as `local` (with the parent's own box alongside)
+ * instead of being passed off as an absolute position — an agent placing a
+ * follow-up setTransform needs to know which frame it is addressing.
+ */
 function elementInfo(el: SlideElement): Record<string, unknown> {
   const t = el.transform?.offset ?? { x: 0, y: 0, cx: 0, cy: 0 }
   const info: Record<string, unknown> = {
@@ -59,10 +74,15 @@ function elementInfo(el: SlideElement): Record<string, unknown> {
   if (el.type === 'text' || el.type === 'shape') {
     const paragraphs = el.text?.paragraphs ?? []
     if (paragraphs.length) {
-      info.text = paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join('\n')
+      const full = paragraphs.map((p) => p.runs.map((r) => r.text).join('')).join('\n')
+      info.text = clip(full)
+      if (full.length > MAX_TEXT_CHARS) info.textTruncated = true
     }
   } else if (el.type === 'table') {
-    info.text = el.rows
+    const rows = el.rows
+    const totalRows = rows.length
+    const body = rows
+      .slice(0, MAX_TABLE_ROWS)
       .map((row) =>
         row
           .map((cell) =>
@@ -71,8 +91,18 @@ function elementInfo(el: SlideElement): Record<string, unknown> {
           .join(' | '),
       )
       .join('\n')
+    info.text = clip(body)
+    if (totalRows > MAX_TABLE_ROWS) {
+      info.textTruncated = true
+      info.rows = totalRows
+    }
   } else if (el.type === 'group') {
-    info.children = el.children.map(elementInfo)
+    // children are in the group's local frame: say so rather than implying
+    // document-space coordinates
+    info.children = el.children.map((child) => ({
+      ...elementInfo(child),
+      coordinates: 'local-to-group',
+    }))
   }
   return info
 }
@@ -81,6 +111,7 @@ function readDeckModel(session: Session): Record<string, unknown> {
   const deck = session.opened.deck
   return {
     emuPerPx: EMU_PER_PX_96,
+    note: 'x/y/w/h are EMU in slide space; elements inside a group use the group-local frame (marked coordinates:"local-to-group").',
     slideSize: {
       widthPx: Math.round(deck.size.cx / EMU_PER_PX_96),
       heightPx: Math.round(deck.size.cy / EMU_PER_PX_96),
@@ -124,7 +155,13 @@ export function createSlidesControl(deps: SlidesBridgeDeps): SlidesControl {
           for (const id of ids) webContents.fromId(id)?.send('slides:deck-changed', payload)
         }
       }
-      return result
+      // The render tree was only needed for the canvas push above: it carries
+      // base64 dataUrls for pictures and fills, so echoing it in the tool result
+      // would put the whole deck (and its images) into the agent's context on
+      // every op. The agent sees the transaction outcome; read_deck is the model
+      // readout.
+      const { slides: _renderTree, ...summary } = result
+      return summary
     },
     readDeck: async (wcId: number) => readDeckModel(requireSession(wcId)),
     saveDeck: async (wcId: number, filePath: string, overwrite: boolean) => {
