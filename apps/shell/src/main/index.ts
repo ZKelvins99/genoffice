@@ -2881,6 +2881,17 @@ function openBlankDocsTabForMcp(): number {
   return view.webContents.id
 }
 
+/** MCP: open a blank slides tab and return its webContents id, for the visible-deck bridge */
+function openBlankSlidesTabForMcp(): number {
+  if (!tabManager) throw new Error('GenOffice is not ready')
+  const tabId = tabManager.openSlidesTab()
+  const view = tabManager.slidesTabs().find((t) => t.id === tabId)
+  if (!view) throw new Error('the new presentation tab could not be opened')
+  recordStarPromptDocOpen()
+  analytics.track('file_new', { kind: 'pptx' })
+  return view.webContents.id
+}
+
 /**
  * MCP: open a blank sheets tab and return its webContents id, for the
  * visible-grid bridge. Like the app's own "new spreadsheet", a real blank
@@ -2897,17 +2908,6 @@ async function openBlankSheetsTabForMcp(): Promise<number> {
   if (!view) throw new Error('the new spreadsheet tab could not be opened')
   recordStarPromptDocOpen()
   analytics.track('file_new', { kind: 'xlsx' })
-  return view.webContents.id
-}
-
-/** MCP: open a blank slides tab and return its webContents id, for the visible-deck bridge */
-function openBlankSlidesTabForMcp(): number {
-  if (!tabManager) throw new Error('GenOffice is not ready')
-  const tabId = tabManager.openSlidesTab()
-  const view = tabManager.slidesTabs().find((t) => t.id === tabId)
-  if (!view) throw new Error('the new presentation tab could not be opened')
-  recordStarPromptDocOpen()
-  analytics.track('file_new', { kind: 'pptx' })
   return view.webContents.id
 }
 
