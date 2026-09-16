@@ -25,6 +25,12 @@ export interface OpenDocumentsBridgeDeps {
   docs?: DocsControl
   sheets?: SheetsControl
   slides?: SlidesControl
+  /**
+   * slides: drop the session's crash-recovery copies (autosave + untitled draft)
+   * on a discard close, so the next open does not offer to restore edits the
+   * caller explicitly dropped. Mirrors the interactive "Don't Save" branch.
+   */
+  slidesDiscard?: (contents: WebContents) => void
   /** markdown: live text + dialog-free save (the app owns the renderer protocol) */
   markdown?: {
     read: (contents: WebContents) => Promise<string>
@@ -122,6 +128,10 @@ export function createOpenDocumentsControl(deps: OpenDocumentsBridgeDeps): OpenD
       await deps.html.discard(requireContents(tab, deps)).catch((error) => {
         console.warn('[mcp] html discard cleanup incomplete:', error)
       })
+    } else if (tab.kind === 'slides' && deps.slidesDiscard) {
+      // slides keeps its own crash-recovery copies; dropping the edits must drop
+      // them too, or the next open offers them back
+      deps.slidesDiscard(requireContents(tab, deps))
     }
   }
 

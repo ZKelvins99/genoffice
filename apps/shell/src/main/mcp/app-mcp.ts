@@ -164,6 +164,9 @@ function buildTools(): McpToolDefinition[] {
       defaultSaveDir: deps.defaultSaveDir,
       ...(deps.openDocumentsControl ? { control: deps.openDocumentsControl } : {}),
     }),
+    // headless, session-free read access (read_pdf); always registered, so the
+    // pdf family mcpStatus advertises is one the client can actually call
+    ...createPdfTools(),
   ]
 }
 

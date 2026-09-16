@@ -51,6 +51,18 @@ export interface SessionHost {
   end: () => void
 }
 
+/**
+ * A driver's save result that reports failure as data instead of throwing
+ * (sheets' `SaveOutcome`). Returns the message to raise, or null on success.
+ */
+function saveFailure(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null
+  const { ok, reason, error } = result as { ok?: unknown; reason?: unknown; error?: unknown }
+  if (ok !== false) return null
+  const detail = typeof reason === 'string' ? reason : typeof error === 'string' ? error : undefined
+  return detail ? `the file could not be saved: ${detail}` : 'the file could not be saved'
+}
+
 export function createSessionHost(): SessionHost {
   let active: ActiveSession | null = null
   return {
@@ -129,6 +141,14 @@ export function createSessionTools(
         if (!isAbsolute(requested)) throw new Error('path must be absolute')
         const filePath = withSaveExtension(session.family, requested)
         const result = await driver.save(session.wcId, filePath, args.overwrite === true)
+        // Some drivers report a failed write as data rather than by throwing
+        // (sheets returns the renderer's SaveOutcome `{ok:false}`), so returning
+        // it verbatim would tell the agent the file was written when it was not.
+        // Raise a tool error and keep the session open: the edits are still in
+        // the tab, so the caller can correct the path and retry instead of
+        // rebuilding the document from scratch.
+        const failure = saveFailure(result)
+        if (failure) throw new Error(failure)
         host.end()
         return result
       },

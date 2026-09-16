@@ -174,6 +174,7 @@ import {
 } from '../../../sheets/src/main/sheets-main'
 import {
   configureSlidesRuntime,
+  discardSlidesRecovery,
   exportSlidesPdfHeadless,
   installSlidesMenu,
   replaceSlidesRecentFile,
@@ -4860,6 +4861,7 @@ app.whenReady().then(async () => {
       docs: mcpDocsControl,
       sheets: mcpSheetsControl,
       slides: mcpSlidesControl,
+      slidesDiscard: discardSlidesRecovery,
       markdown: {
         read: markdownReadText,
         save: markdownSaveToPath,

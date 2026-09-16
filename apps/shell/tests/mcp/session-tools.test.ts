@@ -131,4 +131,34 @@ describe('createSessionTools', () => {
     await save!.handler({ path: '/tmp/notes' })
     expect(saved).toEqual(['/tmp/notes.docx'])
   })
+
+  // A driver may report a failed write as data instead of throwing — sheets
+  // forwards the renderer's SaveOutcome `{ok:false}`. Returning that verbatim
+  // and ending the session told the agent the file was written, then left it
+  // with no session to retry against.
+  it('raises a tool error when the driver reports a failed save, keeping the session', async () => {
+    const host = createSessionHost()
+    const xlsx: FamilyDriver = {
+      ...driver('xlsx', 12),
+      save: async () => ({ ok: false, reason: 'the workbook could not be written' }),
+    }
+    const [create, save] = createSessionTools([xlsx], host)
+    await create!.handler({ family: 'xlsx' })
+
+    await expect(save!.handler({ path: '/tmp/out.xlsx' })).rejects.toThrow(
+      /could not be saved: the workbook could not be written/,
+    )
+    // the edits are still in the tab, so the caller can retry
+    expect(host.current()?.family).toBe('xlsx')
+  })
+
+  it('reports a bare failed save without inventing a reason', async () => {
+    const host = createSessionHost()
+    const xlsx: FamilyDriver = { ...driver('xlsx', 13), save: async () => ({ ok: false }) }
+    const [create, save] = createSessionTools([xlsx], host)
+    await create!.handler({ family: 'xlsx' })
+    await expect(save!.handler({ path: '/tmp/out.xlsx' })).rejects.toThrow(
+      /^the file could not be saved$/,
+    )
+  })
 })

@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { z } from 'zod'
 import type { OpenDocumentTab, TabKind } from '../../../shared/tabs-api'
 import type { McpToolDefinition } from '../mcp-server'
-import { familyLabel, generateExtension, type EditorFamily, type SessionFamily } from './formats'
+import { formatFamily, familyLabel, type EditorFamily } from './formats'
 import { sanitizeFileBase, uniquePathIn } from './document-tools'
 
 /**
@@ -57,11 +57,18 @@ export interface OpenDocumentsDeps {
   defaultSaveDir: () => string
 }
 
-/** the extension documents of one family carry on disk */
+/**
+ * The extension a family's document carries on disk (`.docx`, `.md`, `.html`, …).
+ *
+ * Read from the registry's `editorSave` rather than `generateExtension`: the
+ * latter only answers for the three families that have a headless `create_*`
+ * tool, so asking it about html/md/pdf throws. A close-save needs the family's
+ * own save format, which every family has.
+ */
 function extensionFor(family: EditorFamily): string {
-  if (family === 'md') return '.md'
-  if (family === 'pdf') return '.pdf'
-  return `.${generateExtension(family as SessionFamily)}`
+  const primary = formatFamily(family).editorSave[0]
+  if (!primary) throw new Error(`family "${family}" has no save format`)
+  return `.${primary}`
 }
 
 /**
@@ -136,6 +143,8 @@ export function createOpenDocumentTools(deps: OpenDocumentsDeps): McpToolDefinit
         'id, type, path, title, whether it has ever been saved, and whether it has unsaved ' +
         'changes; "read" returns one document\'s live content including unsaved edits; "close" ' +
         'closes one, saving it first by default (pass unsaved:"discard" to drop the changes). ' +
+        'Note that "close" writes over the document\'s own file when it has a path — it does not ' +
+        'stop to ask, so the saved file replaces whatever was on disk. ' +
         'Identify a document by its path, or by the id from "list" when it has never been saved. ' +
         'PDF tabs are listed but cannot be read or closed here: the pdf app is a viewer, so an ' +
         'open PDF has no readable or savable state through this tool.',
