@@ -18,7 +18,10 @@ import type { SheetsControl } from './tools/sheets-tools'
  * away.
  */
 
-const READY_TIMEOUT_MS = 30_000
+// Kept under the MCP client's own tool timeout (30s), because that is the
+// budget the caller actually sees: waiting longer here makes the client report
+// a bare "timed out" and the reason below never reaches the agent.
+const READY_TIMEOUT_MS = 24_000
 const COMMAND_TIMEOUT_MS = 120_000
 
 interface PendingCommand {

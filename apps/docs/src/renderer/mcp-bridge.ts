@@ -156,23 +156,31 @@ async function runCommand(
  * A fresh tab boots asynchronously (`newFile()` calls setContent, then setDoc),
  * so a command that lands before `doc` exists would be wiped by that blank
  * reset. Wait for the loaded document before announcing readiness.
+ *
+ * The wait never stops retrying, only slows down: a tab that gave up while its
+ * renderer was still booting would look fine in the UI yet stay unaddressable
+ * over MCP for the rest of its life, because readiness is announced exactly
+ * once and never re-derived.
  */
 const READY_POLL_MS = 50
-const READY_POLL_LIMIT = 400
+const READY_SLOW_POLL_MS = 1_000
+const READY_FAST_WINDOW_MS = 20_000
 
 async function announceWhenLoaded(
   deps: McpBridgeDeps,
   signal: () => void,
   isCancelled: () => boolean,
 ): Promise<void> {
-  for (let i = 0; i < READY_POLL_LIMIT; i++) {
+  const startedAt = Date.now()
+  for (;;) {
     if (isCancelled()) return
     const ctx = deps.getCtx()
     if (ctx?.editor && ctx.doc) {
       signal()
       return
     }
-    await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS))
+    const slow = Date.now() - startedAt > READY_FAST_WINDOW_MS
+    await new Promise((resolve) => setTimeout(resolve, slow ? READY_SLOW_POLL_MS : READY_POLL_MS))
   }
 }
 
