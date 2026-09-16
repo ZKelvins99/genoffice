@@ -141,6 +141,13 @@ export interface SheetsBridgeDeps {
   /** open a fresh blank sheets tab (a real backing file, like the app's own
    *  "new spreadsheet"); returns its webContents id */
   openBlankTab: () => Promise<number>
+  /**
+   * Close a blank tab whose session never became ready and delete the empty
+   * workbook file created for it. `create_session` must not leave a tab and an
+   * orphaned .xlsx behind when the wait fails, and only the caller that created
+   * the file knows its path.
+   */
+  abandonBlankTab?: (wcId: number) => void
 }
 
 export function createSheetsControl(deps: SheetsBridgeDeps): SheetsControl {
@@ -167,7 +174,14 @@ export function createSheetsControl(deps: SheetsBridgeDeps): SheetsControl {
   return {
     openBlankTab: async () => {
       const wcId = await deps.openBlankTab()
-      await waitForReady(wcId)
+      try {
+        await waitForReady(wcId)
+      } catch (error) {
+        // the tab and its backing file would otherwise outlive the failed
+        // create_session as an orphan the user never asked for
+        deps.abandonBlankTab?.(wcId)
+        throw error
+      }
       return wcId
     },
     runCommand,

@@ -3012,10 +3012,54 @@ async function openBlankSheetsTabForMcp(): Promise<number> {
   writeFileSync(filePath, await blankXlsxBuffer())
   const tabId = tabManager.openSheetsTab(filePath)
   const view = tabManager.sheetsTabs().find((t) => t.id === tabId)
-  if (!view) throw new Error('the new spreadsheet tab could not be opened')
+  if (!view) {
+    // the tab never appeared, so nothing will ever consume this file
+    try {
+      rmSync(filePath)
+    } catch (error) {
+      console.warn('[mcp] could not remove the unused blank workbook:', error)
+    }
+    throw new Error('the new spreadsheet tab could not be opened')
+  }
+  mcpBlankSheetPaths.set(view.webContents.id, filePath)
+  // Same nudge the interactive path uses: the renderer subscribes to the open
+  // action only after Univer mounts, so a single push can land in the void on a
+  // cold start and leave the tab sitting on a blank in-memory workbook.
+  startQueuedWorkbookNudge()
   recordStarPromptDocOpen()
   analytics.track('file_new', { kind: 'xlsx' })
   return view.webContents.id
+}
+
+/** backing files of blank sheets tabs created by the MCP session tools */
+const mcpBlankSheetPaths = new Map<number, string>()
+
+/**
+ * MCP: drop a blank sheets tab whose session never became ready, and delete the
+ * empty workbook created for it. Without this a failed `create_session` leaves
+ * an orphan tab plus an .xlsx in the default save folder that the user never
+ * asked for — and nothing in the MCP surface can clean either one up.
+ */
+function abandonBlankSheetsTabForMcp(wcId: number): void {
+  const manager = tabManager
+  const filePath = mcpBlankSheetPaths.get(wcId)
+  mcpBlankSheetPaths.delete(wcId)
+  if (!manager) return
+  const tab = manager.sheetsTabs().find((t) => t.webContents.id === wcId)
+  if (tab) {
+    try {
+      manager.closeTabWithoutPrompt(tab.id)
+    } catch (error) {
+      console.warn('[mcp] could not close the unused spreadsheet tab:', error)
+      return
+    }
+  }
+  if (!filePath) return
+  try {
+    if (existsSync(filePath)) rmSync(filePath)
+  } catch (error) {
+    console.warn('[mcp] could not remove the unused blank workbook:', error)
+  }
 }
 
 /** MCP: open a blank slides tab and return its webContents id, for the visible-deck bridge */
@@ -4840,6 +4884,7 @@ app.whenReady().then(async () => {
   })
   const mcpSheetsControl = createSheetsControl({
     openBlankTab: () => openBlankSheetsTabForMcp(),
+    abandonBlankTab: (wcId) => abandonBlankSheetsTabForMcp(wcId),
   })
   configureMcpRuntime({
     version: app.getVersion(),

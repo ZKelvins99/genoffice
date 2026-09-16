@@ -152,3 +152,40 @@ describe('sheets bridge reply routing', () => {
     await expect(pending).rejects.toThrow(/tab was closed/)
   })
 })
+
+describe('create_session cleanup', () => {
+  it('abandons the blank tab when readiness fails, so no orphan is left behind', async () => {
+    const { installSheetsBridge, createSheetsControl } = await loadBridge()
+    installSheetsBridge()
+
+    // the tab exists but never announces readiness
+    const target = senderFor(7)
+    const abandon = vi.fn()
+    const control = createSheetsControl({
+      openBlankTab: async () => 7,
+      abandonBlankTab: abandon,
+    })
+
+    const pending = control.openBlankTab()
+    ;(target as unknown as { destroy: () => void }).destroy()
+    await expect(pending).rejects.toThrow(/tab was closed/)
+    expect(abandon).toHaveBeenCalledWith(7)
+  })
+
+  it('leaves a ready tab alone', async () => {
+    const { installSheetsBridge, createSheetsControl } = await loadBridge()
+    installSheetsBridge()
+
+    const target = senderFor(8)
+    const abandon = vi.fn()
+    const control = createSheetsControl({
+      openBlankTab: async () => 8,
+      abandonBlankTab: abandon,
+    })
+    const pending = control.openBlankTab()
+    handlers.get('sheets:mcp-ready')!({ sender: target })
+
+    await expect(pending).resolves.toBe(8)
+    expect(abandon).not.toHaveBeenCalled()
+  })
+})
