@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import type { OpenDocumentTab } from '../../src/shared/tabs-api'
-import { createOpenDocumentsControl } from '../../src/main/mcp/open-documents-bridge'
+import {
+  createOpenDocumentsControl,
+  createOpenTargetResolver,
+} from '../../src/main/mcp/open-documents-bridge'
 import type { OpenDocumentsBridgeDeps } from '../../src/main/mcp/open-documents-bridge'
 import { createOpenDocumentTools } from '../../src/main/mcp/tools/open-documents-tools'
 
@@ -144,5 +147,73 @@ describe('open_documents close: PDF guard', () => {
     const doc = tab({ id: 't6', kind: 'pdf', title: 'six.pdf', filePath: 'C:/docs/six.pdf' })
     const { call } = await controlWith([doc])
     await expect(call({ action: 'close', target: 't6' })).rejects.toThrow(/viewer/)
+  })
+})
+
+describe('open target resolver: focusing the document the agent edits', () => {
+  it('activates the named tab and reveals the window', async () => {
+    const activate = vi.fn()
+    const revealWindow = vi.fn()
+    const doc = tab({
+      id: 't9',
+      kind: 'sheets',
+      title: 'book.xlsx',
+      filePath: 'C:/docs/book.xlsx',
+      active: false,
+    })
+    const resolve = createOpenTargetResolver({
+      list: async () => [doc],
+      webContentsFor: () => contentsFor(),
+      activate,
+      revealWindow,
+    })
+
+    await expect(resolve('t9', 'xlsx', { focus: true })).resolves.toBe(7)
+    expect(activate).toHaveBeenCalledWith('t9')
+    expect(revealWindow).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the UI alone for a read, and for a tab already in front', async () => {
+    const activate = vi.fn()
+    const revealWindow = vi.fn()
+    const back = tab({ id: 't1', kind: 'sheets', title: 'back.xlsx', active: false })
+    const front = tab({ id: 't2', kind: 'sheets', title: 'front.xlsx', active: true })
+    const resolve = createOpenTargetResolver({
+      list: async () => [back, front],
+      webContentsFor: () => contentsFor(),
+      activate,
+      revealWindow,
+    })
+
+    // read tools pass no focus option
+    await resolve('t1', 'xlsx')
+    expect(activate).not.toHaveBeenCalled()
+
+    // an already-active tab needs no switch
+    await resolve('t2', 'xlsx', { focus: true })
+    expect(activate).not.toHaveBeenCalled()
+    expect(revealWindow).not.toHaveBeenCalled()
+  })
+
+  it('still resolves the edit when the UI call fails', async () => {
+    const doc = tab({ id: 't3', kind: 'xlsx' as never, title: 'x.xlsx', active: false })
+    const resolve = createOpenTargetResolver({
+      list: async () => [{ ...doc, kind: 'sheets' }],
+      webContentsFor: () => contentsFor(),
+      activate: () => {
+        throw new Error('no such tab')
+      },
+    })
+    // showing the tab is a courtesy: the caller's edit must still go through
+    await expect(resolve('t3', 'xlsx', { focus: true })).resolves.toBe(7)
+  })
+
+  it('refuses a document of the wrong family', async () => {
+    const doc = tab({ id: 't4', kind: 'docs', title: 'doc.docx', active: false })
+    const resolve = createOpenTargetResolver({
+      list: async () => [doc],
+      webContentsFor: () => contentsFor(),
+    })
+    await expect(resolve('t4', 'xlsx', { focus: true })).rejects.toThrow(/Word document/)
   })
 })

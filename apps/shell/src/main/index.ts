@@ -153,7 +153,7 @@ import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
 import { createDocsControl, installDocsBridge } from './mcp/docs-bridge'
 import { createSlidesControl } from './mcp/slides-bridge'
 import { createSheetsControl, installSheetsBridge } from './mcp/sheets-bridge'
-import { createOpenDocumentsControl } from './mcp/open-documents-bridge'
+import { createOpenDocumentsControl, createOpenTargetResolver } from './mcp/open-documents-bridge'
 import {
   configureSheetsRuntime,
   exportSheetsPdfHeadless,
@@ -4881,6 +4881,19 @@ app.whenReady().then(async () => {
       entry: app.isPackaged
         ? join(process.resourcesPath, 'cli', 'genoffice.cjs')
         : join(APPS_ROOT, '..', 'packages', 'cli', 'dist', 'genoffice.cjs'),
+    }),
+    // lets the content tools take a `document` argument (tab id or path) and edit
+    // a tab the *user* has open, with no create_session involved
+    resolveTarget: createOpenTargetResolver({
+      list: () => {
+        if (!tabManager) throw new Error('the tab manager is not ready')
+        return tabManager.openDocuments()
+      },
+      webContentsFor: (tabId) => tabManager?.webContentsForTab(tabId),
+      // an agent editing a background tab would otherwise work where nobody can
+      // see it: switch to that tab and bring the window forward first
+      activate: (tabId) => tabManager?.activateTab(tabId),
+      revealWindow: revealShellWindow,
     }),
     logFilePath: join(app.getPath('userData'), 'mcp-log.txt'),
   })

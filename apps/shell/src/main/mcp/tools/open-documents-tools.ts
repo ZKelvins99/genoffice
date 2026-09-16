@@ -92,6 +92,28 @@ function normalizePath(value: string): string {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
+/**
+ * Resolve an open document addressed by tab id or path, requiring it to belong
+ * to `family`. This is the shared lookup behind the content tools' optional
+ * `document` argument, so "point this edit at a tab the user opened" behaves
+ * exactly like `open_documents` — same matching rules, same guided errors.
+ */
+export function resolveOpenDocumentOfFamily(
+  documents: readonly OpenDocumentTab[],
+  target: string,
+  family: EditorFamily,
+): OpenDocumentTab {
+  const doc = resolveOpenDocument(documents, target)
+  if (!doc) throw noMatch(target, documents)
+  const actual = FAMILY_BY_KIND[doc.kind]
+  if (actual !== family) {
+    throw new Error(
+      `"${doc.title}" is a ${familyLabel(actual)}, but this tool edits ${familyLabel(family)} documents`,
+    )
+  }
+  return doc
+}
+
 /** a guided "no such document" error listing what is actually open */
 function noMatch(target: string, documents: readonly OpenDocumentTab[]): Error {
   if (documents.length === 0) {
@@ -146,6 +168,9 @@ export function createOpenDocumentTools(deps: OpenDocumentsDeps): McpToolDefinit
         'Note that "close" writes over the document\'s own file when it has a path — it does not ' +
         'stop to ask, so the saved file replaces whatever was on disk. ' +
         'Identify a document by its path, or by the id from "list" when it has never been saved. ' +
+        'To *edit* one of these documents, pass its id (or path) as the `document` argument of the ' +
+        'family content tools (insert_content / apply_ops / apply_sheet_ops / apply_slide_ops): no ' +
+        'session is needed, and the UI switches to that tab so the user sees the change land. ' +
         'PDF tabs are listed but cannot be read or closed here: the pdf app is a viewer, so an ' +
         'open PDF has no readable or savable state through this tool.',
       inputSchema: {

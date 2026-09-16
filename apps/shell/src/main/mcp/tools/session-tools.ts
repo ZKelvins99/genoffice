@@ -22,6 +22,23 @@ import { familyLabel, withSaveExtension, type SessionFamily } from './formats'
 export type { SessionFamily }
 
 /**
+ * Resolve a document reference (tab id, or path) to the webContents id of that
+ * open tab. The content tools call this when the caller passed `document`, which
+ * redirects the edit from the session's own blank tab to one the user has open —
+ * the bridges are addressed by webContents id, so no session is involved.
+ *
+ * With `focus`, the tab is also brought into view (activated, and the window
+ * revealed) so the user watches the change land instead of it happening behind
+ * a tab they cannot see. Mutating tools ask for it; reads do not, because an
+ * agent sweeping several tabs for context should not make the UI jump along.
+ */
+export type TargetResolver = (
+  target: string,
+  family: SessionFamily,
+  options?: { focus?: boolean },
+) => Promise<number>
+
+/**
  * One family's visible-session lifecycle, implemented by the family's tool
  * module. `openBlankTab` opens the tab; `save` writes that tab to disk through
  * the family's own bridge.
@@ -82,6 +99,32 @@ export function createSessionHost(): SessionHost {
     end() {
       active = null
     },
+  }
+}
+
+/**
+ * Where a content tool should send its command: the open document the caller
+ * named, or the session's own tab when they named none.
+ *
+ * Naming a document is the escape hatch from the single-session model — an agent
+ * can edit the workbook the user is looking at without a `create_session`, and
+ * without that session's blank tab being replaced. The tab keeps its own
+ * dirty/save lifecycle: MCP edits land in the live document and the user decides
+ * when to save (or the caller uses `open_documents {action:"save"}`).
+ */
+export function contentTarget(
+  host: SessionHost,
+  resolveTarget: TargetResolver | undefined,
+  family: SessionFamily,
+): (document?: unknown, options?: { focus?: boolean }) => Promise<number> {
+  return async (document, options) => {
+    if (typeof document !== 'string' || !document) return host.require(family)
+    if (!resolveTarget) {
+      throw new Error(
+        'this build cannot target an open document; use create_session and its own tab instead',
+      )
+    }
+    return resolveTarget(document, family, options)
   }
 }
 
