@@ -193,7 +193,14 @@ export function createSessionTools(
         const failure = saveFailure(result)
         if (failure) throw new Error(failure)
         host.end()
-        return result
+        // Normalize the success shape: drivers differ (docs returns `{ok,path}`,
+        // slides just `{path}`), and an agent that checks `ok` on every family
+        // would read the slides save as a failure. A driver that returned a
+        // non-object is reported as-is under `result` rather than being spread
+        // into the response as indexed characters.
+        const detail =
+          result && typeof result === 'object' ? (result as Record<string, unknown>) : { result }
+        return { ok: true, ...detail }
       },
     },
   ]
